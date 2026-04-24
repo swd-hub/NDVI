@@ -133,17 +133,17 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
   <div class="side" id="sidebar">
     <div class="side-scroll">
 
-      <!-- GEE接続設定 -->
-      <div class="sh">GEE 接続設定</div>
+　　　<div class="sh">GEE 接続設定</div>
       <div class="cfg">
         <label>GCP Project ID</label>
-        <input type="text" id="inp-project" placeholder="my-gee-project-id">
+        <input type="text" id="inp-project" value="ai-test-2026">
+        
         <label>OAuth2 Client ID</label>
-        <input type="text" id="inp-client" placeholder="xxxx.apps.googleusercontent.com">
+        <input type="text" id="inp-client" value="409312431902-5qtfmognhv1rgt5esjnsu8l0p55gt201.apps.googleusercontent.com">
+        
         <div class="cfg-note">
-          ⚠ <strong>ローカルサーバーから開いてください</strong>（VS Code Live Server 等）<br>
-          GCP Console → 「承認済みの JavaScript 生成元」に <code>http://localhost:PORT</code> を登録。<br>
-          Earth Engine API を有効化 &amp; earthengine.readonly スコープが必要です。
+          ⚠ <strong>GitHub Pages から実行中</strong><br>
+          GCP Console → 「承認済みの JavaScript 生成元」に <code>https://swd-hub.github.io</code> を登録済みであることを確認してください。
         </div>
         <button class="btn-auth" id="btn-auth" onclick="requestAuth()">🔑 Google ログイン (GEE)</button>
       </div>
