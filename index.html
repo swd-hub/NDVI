@@ -376,7 +376,7 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // ImageCollection.filter -> Collection.filter に修正
+      // 修正：REST API では 'Collection.filter' + 'Filter.date' の組み合わせ
       filtered: { 
         functionInvocationValue: { 
           functionName: 'Collection.filter',
@@ -384,7 +384,7 @@ function buildTileExpr(dateStart, dateEnd) {
             collection: { valueReference: 'col' },
             filter: { 
               functionInvocationValue: {
-                functionName: 'Filter.dateRange',
+                functionName: 'Filter.date', // 'Filter.dateRange' を 'Filter.date' に変更
                 arguments: {
                   start: { constantValue: dateStart },
                   end: { constantValue: dateEnd }
@@ -394,8 +394,6 @@ function buildTileExpr(dateStart, dateEnd) {
           } 
         } 
       },
-      // Collection.first も環境により ImageCollection.first の場合がありますが、
-      // まずは Collection.first で試します
       img: { 
         functionInvocationValue: { 
           functionName: 'Collection.first',
@@ -444,7 +442,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
             collection: { valueReference: 'col' },
             filter: { 
               functionInvocationValue: {
-                functionName: 'Filter.dateRange',
+                functionName: 'Filter.date', // 同様に修正
                 arguments: {
                   start: { constantValue: dateStart },
                   end: { constantValue: dateEnd }
@@ -500,7 +498,6 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
     result: '0'
   };
 }
-
 // ── 認証付きタイルレイヤー (カスタム L.GridLayer) ──
 const AuthTileLayer = L.GridLayer.extend({
   options: { tileSize: 256, opacity: 0.8 },
