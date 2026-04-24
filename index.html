@@ -376,7 +376,7 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // 修正：REST API では 'Collection.filter' + 'Filter.date' の組み合わせ
+      // 名前解決に頼らず、直接 dateRange 命令を組み立てます
       filtered: { 
         functionInvocationValue: { 
           functionName: 'Collection.filter',
@@ -384,7 +384,7 @@ function buildTileExpr(dateStart, dateEnd) {
             collection: { valueReference: 'col' },
             filter: { 
               functionInvocationValue: {
-                functionName: 'Filter.date', // 'Filter.dateRange' を 'Filter.date' に変更
+                functionName: 'Filter.dateRange',
                 arguments: {
                   start: { constantValue: dateStart },
                   end: { constantValue: dateEnd }
@@ -396,7 +396,7 @@ function buildTileExpr(dateStart, dateEnd) {
       },
       img: { 
         functionInvocationValue: { 
-          functionName: 'Collection.first',
+          functionName: 'ImageCollection.first', 
           arguments: { collection: { valueReference: 'filtered' } } 
         } 
       },
@@ -442,7 +442,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
             collection: { valueReference: 'col' },
             filter: { 
               functionInvocationValue: {
-                functionName: 'Filter.date', // 同様に修正
+                functionName: 'Filter.dateRange',
                 arguments: {
                   start: { constantValue: dateStart },
                   end: { constantValue: dateEnd }
@@ -454,7 +454,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
       },
       img: { 
         functionInvocationValue: { 
-          functionName: 'Collection.first',
+          functionName: 'ImageCollection.first', 
           arguments: { collection: { valueReference: 'filtered' } } 
         } 
       },
@@ -498,6 +498,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
     result: '0'
   };
 }
+  
 // ── 認証付きタイルレイヤー (カスタム L.GridLayer) ──
 const AuthTileLayer = L.GridLayer.extend({
   options: { tileSize: 256, opacity: 0.8 },
