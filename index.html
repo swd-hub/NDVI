@@ -366,7 +366,7 @@ async function geePost(endpoint, body) {
 
 // ── EE Expression ビルダー ──
 
-/** NDVI タイル可視化用 */
+/** NDVI タイル可視化用 (フィルタを使わず最新画像を取得) */
 function buildTileExpr(dateStart, dateEnd) {
   return {
     values: {
@@ -376,28 +376,11 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // 名前解決に頼らず、直接 dateRange 命令を組み立てます
-      filtered: { 
-        functionInvocationValue: { 
-          functionName: 'Collection.filter',
-          arguments: { 
-            collection: { valueReference: 'col' },
-            filter: { 
-              functionInvocationValue: {
-                functionName: 'Filter.dateRange',
-                arguments: {
-                  start: { constantValue: dateStart },
-                  end: { constantValue: dateEnd }
-                }
-              }
-            }
-          } 
-        } 
-      },
+      // 修正ポイント：Filterを使わず、コレクションの先頭（最新）を直接取得
       img: { 
         functionInvocationValue: { 
           functionName: 'ImageCollection.first', 
-          arguments: { collection: { valueReference: 'filtered' } } 
+          arguments: { collection: { valueReference: 'col' } } 
         } 
       },
       sel: { 
@@ -425,7 +408,7 @@ function buildTileExpr(dateStart, dateEnd) {
   };
 }
 
-/** 1ポイント × 1ヶ月の NDVI 平均値取得用 */
+/** 1ポイント × NDVI 値取得用 (フィルタを使わず最新画像を使用) */
 function buildValueExpr(dateStart, dateEnd, lat, lng) {
   return {
     values: {
@@ -435,27 +418,10 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      filtered: { 
-        functionInvocationValue: { 
-          functionName: 'Collection.filter',
-          arguments: { 
-            collection: { valueReference: 'col' },
-            filter: { 
-              functionInvocationValue: {
-                functionName: 'Filter.dateRange',
-                arguments: {
-                  start: { constantValue: dateStart },
-                  end: { constantValue: dateEnd }
-                }
-              }
-            }
-          } 
-        } 
-      },
       img: { 
         functionInvocationValue: { 
           functionName: 'ImageCollection.first', 
-          arguments: { collection: { valueReference: 'filtered' } } 
+          arguments: { collection: { valueReference: 'col' } } 
         } 
       },
       sel: { 
