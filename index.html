@@ -367,6 +367,7 @@ async function geePost(endpoint, body) {
 // ── EE Expression ビルダー ──
 
 /** NDVI タイル可視化用 (フィルタを使わず最新画像を取得) */
+/** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd) {
   return {
     values: {
@@ -376,10 +377,11 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // 修正ポイント：Filterを使わず、コレクションの先頭（最新）を直接取得
+      // ImageCollection.first でも Collection.first でもない場合、
+      // 1つの要素のみを持つコレクションとして制限してから取得します
       img: { 
         functionInvocationValue: { 
-          functionName: 'ImageCollection.first', 
+          functionName: 'Collection.first', // 再度、より短い名前に戻します
           arguments: { collection: { valueReference: 'col' } } 
         } 
       },
