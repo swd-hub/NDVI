@@ -370,21 +370,56 @@ async function geePost(endpoint, body) {
 function buildTileExpr(dateStart, dateEnd) {
   return {
     values: {
-      col:      { functionInvocationValue: { functionName: 'ImageCollection.load',
-                    arguments: { id: { constantValue: MODIS_COL } } } },
-      filtered: { functionInvocationValue: { functionName: 'ImageCollection.filterDate',
-                    arguments: { collection: { valueReference: 'col' },
-                                 start: { constantValue: dateStart }, end: { constantValue: dateEnd } } } },
-      img:      { functionInvocationValue: { functionName: 'Collection.first',
-                    arguments: { collection: { valueReference: 'filtered' } } } },
-      sel:      { functionInvocationValue: { functionName: 'Image.select',
-                    arguments: { input: { valueReference: 'img' },
-                                 bandSelectors: { constantValue: [NDVI_BAND] } } } },
-      '0':      { functionInvocationValue: { functionName: 'Image.visualize',
-                    arguments: { input: { valueReference: 'sel' },
-                                 min: { constantValue: NDVI_RAW_MIN },
-                                 max: { constantValue: NDVI_RAW_MAX },
-                                 palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] } } } }
+      col: { 
+        functionInvocationValue: { 
+          functionName: 'ImageCollection.load',
+          arguments: { id: { constantValue: MODIS_COL } } 
+        } 
+      },
+      // 修正: ImageCollection.filterDate の代わりに filter + Filter.dateRange を使用
+      filtered: { 
+        functionInvocationValue: { 
+          functionName: 'ImageCollection.filter',
+          arguments: { 
+            collection: { valueReference: 'col' },
+            filter: { 
+              functionInvocationValue: {
+                functionName: 'Filter.dateRange',
+                arguments: {
+                  start: { constantValue: dateStart },
+                  end: { constantValue: dateEnd }
+                }
+              }
+            }
+          } 
+        } 
+      },
+      img: { 
+        functionInvocationValue: { 
+          functionName: 'Collection.first',
+          arguments: { collection: { valueReference: 'filtered' } } 
+        } 
+      },
+      sel: { 
+        functionInvocationValue: { 
+          functionName: 'Image.select',
+          arguments: { 
+            input: { valueReference: 'img' },
+            bandSelectors: { constantValue: [NDVI_BAND] } 
+          } 
+        } 
+      },
+      '0': { 
+        functionInvocationValue: { 
+          functionName: 'Image.visualize',
+          arguments: { 
+            input: { valueReference: 'sel' },
+            min: { constantValue: NDVI_RAW_MIN },
+            max: { constantValue: NDVI_RAW_MAX },
+            palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] } 
+          } 
+        } 
+      }
     },
     result: '0'
   };
@@ -394,27 +429,72 @@ function buildTileExpr(dateStart, dateEnd) {
 function buildValueExpr(dateStart, dateEnd, lat, lng) {
   return {
     values: {
-      col:      { functionInvocationValue: { functionName: 'ImageCollection.load',
-                    arguments: { id: { constantValue: MODIS_COL } } } },
-      filtered: { functionInvocationValue: { functionName: 'ImageCollection.filterDate',
-                    arguments: { collection: { valueReference: 'col' },
-                                 start: { constantValue: dateStart }, end: { constantValue: dateEnd } } } },
-      img:      { functionInvocationValue: { functionName: 'Collection.first',
-                    arguments: { collection: { valueReference: 'filtered' } } } },
-      sel:      { functionInvocationValue: { functionName: 'Image.select',
-                    arguments: { input: { valueReference: 'img' },
-                                 bandSelectors: { constantValue: [NDVI_BAND] } } } },
-      pt:       { functionInvocationValue: { functionName: 'GeometryConstructors.Point',
-                    arguments: { coordinates: { constantValue: [lng, lat] } } } },
-      reduced:  { functionInvocationValue: { functionName: 'Image.reduceRegion',
-                    arguments: { image: { valueReference: 'sel' },
-                                 reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments: {} } },
-                                 geometry: { valueReference: 'pt' },
-                                 scale: { constantValue: 1000 },
-                                 bestEffort: { constantValue: true } } } },
-      '0':      { functionInvocationValue: { functionName: 'Dictionary.get',
-                    arguments: { object: { valueReference: 'reduced' },
-                                 key: { constantValue: NDVI_BAND } } } }
+      col: { 
+        functionInvocationValue: { 
+          functionName: 'ImageCollection.load',
+          arguments: { id: { constantValue: MODIS_COL } } 
+        } 
+      },
+      // 修正: ここも同様に修正
+      filtered: { 
+        functionInvocationValue: { 
+          functionName: 'ImageCollection.filter',
+          arguments: { 
+            collection: { valueReference: 'col' },
+            filter: { 
+              functionInvocationValue: {
+                functionName: 'Filter.dateRange',
+                arguments: {
+                  start: { constantValue: dateStart },
+                  end: { constantValue: dateEnd }
+                }
+              }
+            }
+          } 
+        } 
+      },
+      img: { 
+        functionInvocationValue: { 
+          functionName: 'Collection.first',
+          arguments: { collection: { valueReference: 'filtered' } } 
+        } 
+      },
+      sel: { 
+        functionInvocationValue: { 
+          functionName: 'Image.select',
+          arguments: { 
+            input: { valueReference: 'img' },
+            bandSelectors: { constantValue: [NDVI_BAND] } 
+          } 
+        } 
+      },
+      pt: { 
+        functionInvocationValue: { 
+          functionName: 'GeometryConstructors.Point',
+          arguments: { coordinates: { constantValue: [lng, lat] } } 
+        } 
+      },
+      reduced: { 
+        functionInvocationValue: { 
+          functionName: 'Image.reduceRegion',
+          arguments: { 
+            image: { valueReference: 'sel' },
+            reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments: {} } },
+            geometry: { valueReference: 'pt' },
+            scale: { constantValue: 1000 },
+            bestEffort: { constantValue: true } 
+          } 
+        } 
+      },
+      '0': { 
+        functionInvocationValue: { 
+          functionName: 'Dictionary.get',
+          arguments: { 
+            object: { valueReference: 'reduced' },
+            key: { constantValue: NDVI_BAND } 
+          } 
+        } 
+      }
     },
     result: '0'
   };
