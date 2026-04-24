@@ -366,7 +366,7 @@ async function geePost(endpoint, body) {
 
 // ── EE Expression ビルダー ──
 
-/** NDVI タイル可視化用 (ImageCollection → visualize) */
+/** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd) {
   return {
     values: {
@@ -376,10 +376,10 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // 修正: ImageCollection.filterDate の代わりに filter + Filter.dateRange を使用
+      // ImageCollection.filter -> Collection.filter に修正
       filtered: { 
         functionInvocationValue: { 
-          functionName: 'ImageCollection.filter',
+          functionName: 'Collection.filter',
           arguments: { 
             collection: { valueReference: 'col' },
             filter: { 
@@ -394,6 +394,8 @@ function buildTileExpr(dateStart, dateEnd) {
           } 
         } 
       },
+      // Collection.first も環境により ImageCollection.first の場合がありますが、
+      // まずは Collection.first で試します
       img: { 
         functionInvocationValue: { 
           functionName: 'Collection.first',
@@ -435,10 +437,9 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      // 修正: ここも同様に修正
       filtered: { 
         functionInvocationValue: { 
-          functionName: 'ImageCollection.filter',
+          functionName: 'Collection.filter',
           arguments: { 
             collection: { valueReference: 'col' },
             filter: { 
