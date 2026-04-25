@@ -366,7 +366,7 @@ async function geePost(endpoint, body) {
 
 // ── EE Expression ビルダー ──
 
-/** NDVI タイル可視化用 (指定月のMOD13A3を取得) */
+/** NDVI タイル可視化用 (最新のMOD13A3を取得) */
 function buildTileExpr(dateStart, dateEnd) {
   return {
     values: {
@@ -376,20 +376,10 @@ function buildTileExpr(dateStart, dateEnd) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      filtered: {
-        functionInvocationValue: {
-          functionName: 'Collection.filterDate',
-          arguments: {
-            collection: { valueReference: 'col' },
-            start: { constantValue: dateStart },
-            end: { constantValue: dateEnd }
-          }
-        }
-      },
       img: { 
         functionInvocationValue: { 
           functionName: 'Collection.first',
-          arguments: { collection: { valueReference: 'filtered' } } 
+          arguments: { collection: { valueReference: 'col' } } 
         } 
       },
       sel: { 
@@ -427,20 +417,10 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
           arguments: { id: { constantValue: MODIS_COL } } 
         } 
       },
-      filtered: {
-        functionInvocationValue: {
-          functionName: 'Collection.filterDate',
-          arguments: {
-            collection: { valueReference: 'col' },
-            start: { constantValue: dateStart },
-            end: { constantValue: dateEnd }
-          }
-        }
-      },
       img: { 
         functionInvocationValue: { 
           functionName: 'Collection.first',
-          arguments: { collection: { valueReference: 'filtered' } } 
+          arguments: { collection: { valueReference: 'col' } } 
         } 
       },
       sel: { 
