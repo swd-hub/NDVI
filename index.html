@@ -623,20 +623,26 @@ async function loadTimeSeries() {
 }
 
 // ── 地図初期化 ──
-const gsiPale   = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',          {maxNativeZoom:18,maxZoom:20,attribution:'地理院淡色'});
-const gsiStd    = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',           {maxNativeZoom:18,maxZoom:20,attribution:'地理院標準'});
-const gsiPhoto  = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {maxNativeZoom:18,maxZoom:20,attribution:'地理院航空写真'});
-const cartoL    = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',     {maxNativeZoom:19,maxZoom:20,attribution:'©CARTO'});
-const cartoD    = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',      {maxNativeZoom:19,maxZoom:20,attribution:'©CARTO'});
-const esriSat   = L.tileLayer('https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom:19,maxZoom:20,attribution:'©Esri'});
-const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {maxNativeZoom:20,maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:'©Google'});
+const gsiPale   = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',          {maxNativeZoom:18,maxZoom:22,attribution:'地理院淡色'});
+const gsiStd    = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',           {maxNativeZoom:18,maxZoom:22,attribution:'地理院標準'});
+const gsiRelief = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png',       {maxNativeZoom:15,maxZoom:22,attribution:'地理院標高'});
+const cartoLight   = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',          {maxNativeZoom:19,maxZoom:22,attribution:'©CARTO'});
+const cartoVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {maxNativeZoom:19,maxZoom:22,attribution:'©CARTO'});
+const cartoDark    = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',           {maxNativeZoom:19,maxZoom:22,attribution:'©CARTO'});
+const esriStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom:19,maxZoom:22,attribution:'©Esri'});
+const esriTopo   = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',   {maxNativeZoom:19,maxZoom:22,attribution:'©Esri'});
+const openTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {maxNativeZoom:17,maxZoom:22,attribution:'©OpenTopoMap'});
+const googleMap = L.tileLayer('https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}', {maxNativeZoom:20,maxZoom:22,attribution:'©Google'});
+const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',  {maxNativeZoom:18,maxZoom:22,attribution:'地理院航空写真'});
+const esriSat = L.tileLayer('https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom:19,maxZoom:22,attribution:'©Esri'});
+const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {maxNativeZoom:20,maxZoom:22,subdomains:['mt0','mt1','mt2','mt3'],attribution:'©Google'});
 
 const map = L.map('map', { center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, layers: [gsiPale] });
 L.control.layers({
-  '🗺 国土地理院(淡色)': gsiPale, '🗺 国土地理院(標準)': gsiStd,
-  '🛰 地理院航空写真':   gsiPhoto, '🗺 白地図(Carto)': cartoL,
-  '🗺 ダーク(Carto)':   cartoD,   '🛰 衛星(Esri)': esriSat,
-  '🛰 Google衛星':      googleSat
+  '🗺 国土地理院(淡色)': gsiPale, '🗺 国土地理院(標準)': gsiStd, '🗺 地理院色別標高図': gsiRelief,
+  '🗺 白地図(Carto)': cartoLight, '🗺 自然色地図(Voyager)': cartoVoyager, '🗺 ダーク地図(Carto)': cartoDark,
+  '🗺 Esri 道路地図': esriStreet, '🗺 Esri 地形図': esriTopo, '🗺 OpenTopoMap(地形)': openTopo,
+  '🗺 Google マップ': googleMap, '🛰 地理院最新航空写真': gsiPhoto, '🛰 衛星画像(Esri)': esriSat, '🛰 Google衛星画像': googleSat
 }, null, { position:'bottomleft' }).addTo(map);
 
 // leaflet.draw
