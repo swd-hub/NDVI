@@ -395,7 +395,7 @@ function buildTileExpr(dateStart, dateEnd) {
         functionInvocationValue: { 
           functionName: 'Image.visualize',
           arguments: { 
-            input: { valueReference: 'sel' },
+            image: { valueReference: 'sel' },
             min: { constantValue: NDVI_RAW_MIN },
             max: { constantValue: NDVI_RAW_MAX },
             palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] } 
