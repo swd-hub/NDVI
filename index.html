@@ -285,14 +285,15 @@ let currentDataSource = 'modis';
 
 function selectDataSource(source, el) {
   currentDataSource = source;
-  document.querySelectorAll('.preset-grid:first-of-type .pbtn').forEach(b => b.classList.remove('on'));
+  // el の親要素 (.preset-grid) 内のすべての .pbtn から on クラスを削除
+  el.parentElement.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
   el.classList.add('on');
   
   // 説明を更新
   if (source === 'sentinel') {
     document.getElementById('dateMin').textContent = '2015-06-27';
     document.getElementById('dateMax').textContent = fmtDisp(new Date());
-    setStatus('Sentinel-2: 2015年以降、5日ごと、雲の影響を受けやすいためQAマスク推奨', 'ok');
+    setStatus('Sentinel-2: 2015年以降、5日ごと、最新画像を表示', 'ok');
   } else {
     document.getElementById('dateMin').textContent = fmtDisp(DATES[0]);
     document.getElementById('dateMax').textContent = fmtDisp(DATES[DATES.length-1]);
