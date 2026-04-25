@@ -482,70 +482,19 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             }
           }
         },
-        cloudMasked: {
-          functionInvocationValue: {
-            functionName: 'ImageCollection.map',
-            arguments: {
-              collection: { valueReference: 'filtered' },
-              mapper: {
-                functionDefinition: {
-                  argument: [{ name: 'img' }],
-                  body: {
-                    functionInvocationValue: {
-                      functionName: 'Image.updateMask',
-                      arguments: {
-                        input: { valueReference: 'img' },
-                        mask: {
-                          functionInvocationValue: {
-                            functionName: 'Image.select',
-                            arguments: {
-                              input: { valueReference: 'img' },
-                              bandSelectors: { constantValue: ['SCL'] },
-                              end: { constantValue: 1 }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
         img: {
           functionInvocationValue: {
             functionName: 'Collection.first',
-            arguments: { collection: { valueReference: 'cloudMasked' } }
-          }
-        },
-        nir: {
-          functionInvocationValue: {
-            functionName: 'Image.select',
-            arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: [SENTINEL_B8] }
-            }
-          }
-        },
-        red: {
-          functionInvocationValue: {
-            functionName: 'Image.select',
-            arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: [SENTINEL_B4] }
-            }
+            arguments: { collection: { valueReference: 'filtered' } }
           }
         },
         ndvi: {
           functionInvocationValue: {
-            functionName: 'Image.expression',
+            functionName: 'Image.normalizedDifference',
             arguments: {
-              expression: { constantValue: '(nir - red) / (nir + red)' },
-              vars: {
-                nir: { valueReference: 'nir' },
-                red: { valueReference: 'red' }
-              }
+              image: { valueReference: 'img' },
+              bandA: { constantValue: 'B8' },
+              bandB: { constantValue: 'B4' }
             }
           }
         },
