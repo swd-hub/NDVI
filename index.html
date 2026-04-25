@@ -466,11 +466,17 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
   
 // ── 認証付きタイルレイヤー (カスタム L.GridLayer) ──
 const AuthTileLayer = L.GridLayer.extend({
-  options: { tileSize: 256, opacity: 0.8 },
+  options: { tileSize: 256, opacity: 0.8, zIndex: 999 },
   initialize(mapName, token, options) {
     this._mapName = mapName;
     this._token   = token;
     L.GridLayer.prototype.initialize.call(this, options);
+  },
+  onAdd(map) {
+    L.GridLayer.prototype.onAdd.call(this, map);
+    if (this._container) {
+      this._container.style.zIndex = this.options.zIndex;
+    }
   },
   createTile(coords, done) {
     const sz = this.options.tileSize;
@@ -521,6 +527,7 @@ async function renderNDVI() {
     const opacity = +document.getElementById('opacitySlider').value / 100;
     ndviLayer = new AuthTileLayer(resp.name, accessToken, { opacity });
     ndviLayer.addTo(map);
+    ndviLayer.bringToFront();  // ← 前面に表示
 
     ndviLayer.on('loading', () => setStatus(`タイル取得中 ... ${monthStr}`, 'loading'));
     ndviLayer.on('load',    () => setStatus(`表示完了 — ${monthStr} | MODIS MOD13A3 1km`, 'ok'));
