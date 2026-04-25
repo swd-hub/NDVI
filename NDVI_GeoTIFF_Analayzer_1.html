@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NDVI GeoTIFF Analyzer</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3"></script>
+  <script>
+    if (typeof window.GeoTIFF === 'undefined' && typeof window.geotiff !== 'undefined') {
+      window.GeoTIFF = window.geotiff;
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap');
+
+    :root {
+      --bg: #ffffff;
+      --panel: #f8fafc;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --accent: #059669;
+      --blue: #3b82f6;
+      --green: #16a34a;
+      --red: #ef4444;
+      --text: #0f172a;
+      --muted: #64748b;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Noto Sans JP', sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-weight: 400;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 1000;
+    }
+
+    .sat {
+      font-size: 1.3rem;
+    }
+
+    header h1 {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      letter-spacing: .02em;
+      font-weight: 700;
+    }
+
+    header h1 em {
+      color: var(--accent);
+      font-style: normal;
+    }
+
+    .hbadge {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .app-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .side {
+      width: 340px;
+      min-width: 280px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .side-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 14px 20px;
+      scrollbar-width: thin;
+    }
+
+    .resizer {
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      position: absolute;
+      top: 0;
+      right: -3px;
+      height: 100%;
+      z-index: 1001;
+      transition: background .2s;
+    }
+
+    .resizer:hover, .resizer.active {
+      background: rgba(5, 150, 105, 0.25);
+    }
+
+    .sh {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 16px 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    .sh:first-child {
+      margin-top: 0;
+    }
+
+    .sh::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .cfg {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 12px;
+      margin-bottom: 12px;
+    }
+
+    .cfg label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      margin-top: 8px;
+    }
+
+    .cfg label:first-of-type {
+      margin-top: 0;
+    }
+
+    .cfg select {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 6px 9px;
+      font-size: 0.75rem;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .cfg select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--accent);
+      border-radius: 6px;
+      padding: 16px;
+      text-align: center;
+      background: rgba(5, 150, 105, 0.05);
+      cursor: pointer;
+      transition: background 0.15s;
+      user-select: none;
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      background: rgba(5, 150, 105, 0.15);
+    }
+
+    .drop-zone p {
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin: 4px 0;
+      font-weight: 600;
+    }
+
+    .file-list {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      margin-top: 5px;
+      background: var(--panel);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-size: 0.7rem;
+      border: 1px solid var(--border);
+      border-left-width: 3px;
+    }
+
+    .file-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-item-name {
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-item-meta {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 2px;
+      font-family: var(--mono);
+    }
+
+    .epsg-badge {
+      display: inline-block;
+      background: rgba(5, 150, 105, 0.1);
+      color: var(--accent);
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 8px;
+      margin-left: 4px;
+    }
+
+    .del-btn {
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 0.65rem;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .btn-run {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      letter-spacing: .02em;
+    }
+
+    .btn-run:hover:not(:disabled) {
+      background: #047857;
+    }
+
+    .btn-run:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    .opacity-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .opacity-row label {
+      font-size: 0.65rem;
+      margin: 0;
+    }
+
+    .opacity-row input {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+
+    .opacity-val {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      min-width: 36px;
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .status {
+      border-radius: 6px;
+      padding: 9px 11px;
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      font-family: var(--mono);
+      line-height: 1.4;
+    }
+
+    .status.loading {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .status.ok {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(22, 163, 74, 0.05);
+    }
+
+    .status.error {
+      border-color: var(--red);
+      color: #b91c1c;
+      background: rgba(239, 68, 68, 0.06);
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+
+    .pbtn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.7rem;
+      padding: 7px 6px;
+      cursor: pointer;
+      transition: all .15s;
+      text-align: left;
+    }
+
+    .pbtn:hover {
+      background: #f0fdf4;
+      border-color: var(--accent);
+    }
+
+    .stats-mini {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+
+    .scard {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 7px;
+    }
+
+    .scard .sk {
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .scard .sv {
+      font-size: 0.85rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chart-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px;
+      margin-top: 6px;
+    }
+
+    .map-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #map {
+      flex: 1;
+    }
+
+    .map-toolbar {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 900;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tbtn {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.75rem;
+      padding: 8px 12px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      transition: all .2s;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .tbtn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .map-legend {
+      position: absolute;
+      bottom: 42px;
+      right: 12px;
+      z-index: 900;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 13px;
+      min-width: 210px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    }
+
+    .leg-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 5px;
+    }
+
+    .map-info-bar {
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      padding: 7px 16px;
+      font-size: 0.65rem;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .cl {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <span class="sat">🌾</span>
+    <h1>NDVI GeoTIFF Analyzer <em>[Local Version]</em></h1>
+    <div class="hbadge" style="display:flex;align-items:center;gap:10px;">
+      <span id="lib-status" style="color:#aaa;">ライブラリ読込中...</span>
+      <button id="geeBtn"
+         onclick="openGEE()"
+         style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
+                background:#4285f4;color:#fff;border-radius:6px;border:none;cursor:pointer;
+                font-size:12px;font-weight:600;white-space:nowrap;
+                box-shadow:0 1px 4px rgba(0,0,0,.3);transition:background .2s;"
+         onmouseover="this.style.background='#2b6fd4'"
+         onmouseout="this.style.background='#4285f4'">
+        🌍 Google Earth Engine
+      </button>
+    </div>
+  </header>
+
+  <script>
+  const GEE_SCRIPT = `// ================================================================
+// 出雲市 農業DX：Sentinel-2 NDVI 解析スクリプト
+// 【地図上で長方形を描いた範囲だけをダウンロード】
+// ================================================================
+
+// ── 可視化設定（全体で共通）──────────────────────────────────────
+var ndviViz = {
+  min: 0.2, max: 0.7,
+  palette: ['FFFFCC', 'C2E699', '78C679', '31A354', '006837']
+};
+
+// ── 地図初期表示（出雲市役所付近）────────────────────────────────
+Map.setCenter(132.755, 35.367, 12);
+Map.setOptions('SATELLITE');
+
+// ── 凡例──────────────────────────────────────────────────────────
+var legend = ui.Panel({style: {position: 'bottom-left', padding: '8px 12px'}});
+legend.add(ui.Label({value: 'NDVI（生育状態）', style: {fontWeight: 'bold'}}));
+var legendLabels = ['0.2:土', '0.3:発芽', '0.4:初期', '0.6:順調', '0.7:良好'];
+for (var i = 0; i < 5; i++) {
+  var colorBox = ui.Label({style: {
+    backgroundColor: '#' + ndviViz.palette[i],
+    padding: '8px', margin: '0'
+  }});
+  legend.add(ui.Panel({
+    widgets: [colorBox, ui.Label({value: legendLabels[i], style: {margin: '0 0 4px 6px'}})],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  }));
+}
+Map.add(legend);
+
+// ── 操作パネル（右上）────────────────────────────────────────────
+var panel = ui.Panel({style: {
+  position: 'top-right',
+  padding: '10px',
+  width: '280px'
+}});
+
+var statusLabel = ui.Label({
+  value: '📌 地図上に長方形を描いてください',
+  style: {color: '#333', whiteSpace: 'pre'}
+});
+
+var exportBtn = ui.Button({
+  label: '📥 この範囲でエクスポート',
+  style: {stretch: 'horizontal'},
+  disabled: true
+});
+
+panel.add(ui.Label({value: 'Sentinel-2 NDVI エクスポート', style: {fontWeight: 'bold', fontSize: '14px'}}));
+panel.add(statusLabel);
+panel.add(exportBtn);
+Map.add(panel);
+
+// ── 描画ツール設定──────────────────────────────────────────────
+var drawingTools = Map.drawingTools();
+drawingTools.setShown(true);
+drawingTools.setDrawModes(['rectangle']);
+
+while (drawingTools.layers().length() > 0) {
+  drawingTools.layers().remove(drawingTools.layers().get(0));
+}
+
+// ── NDVI読み込み・表示関数 ────────────────────────────────────────
+function loadAndDisplay(roi) {
+  statusLabel.setValue('🔄 データ取得中...');
+  exportBtn.setDisabled(true);
+
+  var collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(roi)
+    .filterDate('2026-01-01', '2026-12-31')
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+    .select(['B4', 'B8', 'SCL']);
+
+  var masked = collection.map(function(image) {
+    var scl = image.select('SCL');
+    var mask = scl.lt(4).or(scl.eq(5)).or(scl.eq(6)).or(scl.eq(7));
+    var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+    return image.addBands(ndvi).updateMask(mask);
+  });
+
+  var latest = masked.sort('system:time_start', false).first();
+
+  latest.get('system:time_start').evaluate(function(ts) {
+    if (!ts) {
+      statusLabel.setValue('⚠️ 雲の少ない画像が見つかりませんでした\\n期間や範囲を変えて再試行してください');
+      return;
+    }
+
+    var latestDate = ee.Date(ts).format('YYYY-MM-dd').getInfo();
+    var ndvi = latest.select('NDVI');
+
+    Map.layers().reset();
+    Map.addLayer(ndvi, ndviViz, 'NDVI (' + latestDate + ')');
+
+    statusLabel.setValue(
+      '✅ 日付: ' + latestDate + '\\n' +
+      '📐 範囲: 描画済み\\n' +
+      '▶ ボタンを押してエクスポート'
+    );
+
+    exportBtn.setDisabled(false);
+
+    exportBtn.onClick(function() {
+      var ndviRGB = ndvi.visualize(ndviViz);
+
+      Export.image.toDrive({
+        image: ndviRGB,
+        description: 'Sentinel2_NDVI_color_' + latestDate,
+        scale: 10,
+        region: roi,
+        fileFormat: 'GeoTIFF',
+        maxPixels: 1e9
+      });
+
+      statusLabel.setValue(
+        '📋 Tasksに登録しました\\n' +
+        '右上「Tasks」タブ → RUN\\n' +
+        'ファイル名: Sentinel2_NDVI_color_' + latestDate
+      );
+      exportBtn.setDisabled(true);
+    });
+  });
+}
+
+// ── 描画完了イベント──────────────────────────────────────────────
+drawingTools.onDraw(ui.util.debounce(function() {
+  var layers = drawingTools.layers();
+  if (layers.length() === 0) return;
+  var drawnGeom = layers.get(layers.length() - 1).getEeObject();
+  loadAndDisplay(drawnGeom.bounds());
+}, 500));
+
+drawingTools.onEdit(ui.util.debounce(function() {
+  var layers = drawingTools.layers();
+  if (layers.length() === 0) return;
+  var drawnGeom = layers.get(layers.length() - 1).getEeObject();
+  loadAndDisplay(drawnGeom.bounds());
+}, 500));
+
+print('━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+print('🗺  地図上に長方形を描く → NDVI自動表示');
+print('📥 「エクスポート」ボタン → Tasks → RUN');
+print('━━━━━━━━━━━━━━━━━━━━━━━━━━━');`;
+
+  async function openGEE() {
+    const btn = document.getElementById('geeBtn');
+    try {
+      await navigator.clipboard.writeText(GEE_SCRIPT);
+      // 一時的にボタン表示を変えてコピー完了を通知
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✅ コピー完了！';
+      btn.style.background = '#34a853';
+      setTimeout(() => {
+        btn.innerHTML = orig;
+        btn.style.background = '#4285f4';
+        window.open('https://code.earthengine.google.com/', '_blank', 'noopener');
+      }, 800);
+    } catch (e) {
+      // clipboard API が使えない環境（file://）向けフォールバック
+      const ta = document.createElement('textarea');
+      ta.value = GEE_SCRIPT;
+      ta.style.cssText = 'position:fixed;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      window.open('https://code.earthengine.google.com/', '_blank', 'noopener');
+    }
+  }
+  </script>
+
+  <div class="app-body">
+    <div class="side" id="sidebar">
+      <div class="side-scroll">
+
+        <div class="sh">ファイル読み込み</div>
+        <div class="cfg">
+          <div class="drop-zone" id="dropZone">
+            <p>🖱️ <strong>クリック</strong> または</p>
+            <p>TIF ファイルをドラッグ&ドロップ</p>
+          </div>
+          <input type="file" id="fileInput" style="display:none" accept=".tif,.tiff,.jp2" multiple>
+          <ul class="file-list" id="fileList"></ul>
+        </div>
+
+        <div id="sec-band" style="display:none;">
+          <div class="sh">表示設定</div>
+          <div class="cfg">
+            <div class="tabs">
+              <div class="tab active" id="tab-ndvi">📊 NDVI計算</div>
+              <div class="tab" id="tab-single">🖼️ 単バンド</div>
+            </div>
+
+            <div id="panel-ndvi">
+              <div class="row2">
+                <div><label>赤 (B04)</label><select id="redBand"></select></div>
+                <div><label>近赤外 (B08)</label><select id="nirBand"></select></div>
+              </div>
+              <button class="btn-run" id="computeBtn">🔢 NDVI 計算</button>
+            </div>
+
+            <div id="panel-single" style="display:none">
+              <label>バンド</label><select id="singleBand" style="margin-bottom:6px;"></select>
+              <label>カラーマップ</label>
+              <select id="colormap" style="margin-bottom:8px;">
+                <option value="rgb">RGB直接表示（3バンド）</option>
+                <option value="ndvi">NDVI（緑系）</option>
+                <option value="gray">グレースケール</option>
+                <option value="hot">ヒート（黒→赤→黄）</option>
+                <option value="blue">ブルー</option>
+                <option value="spectral">スペクトル</option>
+              </select>
+              <button class="btn-run" id="displayBtn">🖼️ 表示</button>
+            </div>
+
+            <div class="opacity-row">
+              <label>不透明度</label>
+              <input type="range" id="opacity" min="10" max="100" value="80">
+              <span class="opacity-val" id="opacityLabel">80%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="status" id="status">✦ TIFファイルを読み込んでください</div>
+
+        <div id="sec-stats" style="display:none">
+          <div class="sh">全体統計</div>
+          <div class="stats-mini">
+            <div class="scard">
+              <div class="sk">最小</div>
+              <div class="sv" id="vMin">—</div>
+            </div>
+            <div class="scard">
+              <div class="sk">最大</div>
+              <div class="sv" id="vMax">—</div>
+            </div>
+            <div class="scard">
+              <div class="sk">平均</div>
+              <div class="sv" id="vMean">—</div>
+            </div>
+            <div class="scard" style="grid-column: span 3;">
+              <div class="sk">座標系</div>
+              <div class="sv" id="vEPSG" style="font-size: 0.75rem">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sh">地域プリセット</div>
+        <div class="preset-grid">
+          <button class="pbtn" onclick="applyPreset('izumo')">📍 出雲市</button>
+          <button class="pbtn" onclick="applyPreset('matsue')">📍 松江市</button>
+          <button class="pbtn" onclick="applyPreset('hamada')">📍 浜田市</button>
+          <button class="pbtn" onclick="applyPreset('shimane')">📍 島根県</button>
+        </div>
+
+        <div id="chart-wrap" style="display:none">
+          <div class="sh">領域内 NDVI ヒストグラム</div>
+          <div class="chart-box">
+            <canvas id="hist-chart" height="180"></canvas>
+          </div>
+        </div>
+
+      </div>
+      <div class="resizer" id="resizer"></div>
+    </div>
+
+    <div class="map-area">
+      <div id="map"></div>
+      <div class="map-toolbar">
+        <button class="tbtn" id="btn-draw">📐 領域指定 (ヒストグラム)</button>
+        <button class="tbtn" id="btn-clear-draw">🗑 選択クリア</button>
+      </div>
+      <div class="map-legend" id="map-legend" style="display:none">
+        <div class="leg-title" id="leg-title">NDVI 値</div>
+        <canvas id="leg-canvas" height="12" style="width:100%; border-radius:4px; margin-bottom:4px;"></canvas>
+        <div class="leg-labels"><span id="l-min">-0.2</span><span id="l-mid">0.0</span><span id="l-max">1.0</span></div>
+      </div>
+      <div class="map-info-bar">
+        <span>データ: <span class="cl">ローカル GeoTIFF</span></span>
+        <span>マウス: <span class="cl" id="mc">—</span></span>
+        <span style="margin-left:auto">© OSM</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // =====================================================
+    // proj4 座標系定義
+    // =====================================================
+    function setupProj4() {
+      if (typeof proj4 === 'undefined') return;
+      proj4.defs([
+        ['EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs'],
+        ['EPSG:4612', '+proj=longlat +ellps=GRS80 +no_defs'],
+        ['EPSG:6668', '+proj=longlat +ellps=GRS80 +no_defs'],
+        ['EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +no_defs'],
+        ['EPSG:32652', '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs'],
+        ['EPSG:32653', '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs'],
+        ['EPSG:32654', '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs'],
+        ['EPSG:32655', '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs'],
+        ['EPSG:6669', '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6670', '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6671', '+proj=tmerc +lat_0=36 +lon_0=132.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6672', '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6673', '+proj=tmerc +lat_0=36 +lon_0=134.333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6674', '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6675', '+proj=tmerc +lat_0=36 +lon_0=137.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6676', '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6677', '+proj=tmerc +lat_0=36 +lon_0=139.833333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:2443', '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:2444', '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:2445', '+proj=tmerc +lat_0=36 +lon_0=132.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:2446', '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:2447', '+proj=tmerc +lat_0=36 +lon_0=134.333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+      ]);
+    }
+
+    // =====================================================
+    // 状態
+    // =====================================================
+    const S = {
+      files: {},
+      layer: null,
+      map: null,
+      opacity: 0.80,
+      mode: 'ndvi',
+      drawnItems: null,
+      drawControl: null,
+      currentData: null,
+      currentBbox: null,
+      currentWidth: 0,
+      currentHeight: 0
+    };
+
+    let tsChart = null;
+
+    // ── プリセット ──
+    const PRESETS = {
+      izumo: { center: [35.367, 132.755], zoom: 11 },
+      matsue: { center: [35.472, 133.050], zoom: 11 },
+      hamada: { center: [34.899, 132.082], zoom: 11 },
+      shimane: { center: [35.100, 132.300], zoom: 9 }
+    };
+
+    window.applyPreset = function (key) {
+      if (S.map && PRESETS[key]) {
+        S.map.setView(PRESETS[key].center, PRESETS[key].zoom);
+      }
+    };
+
+    // =====================================================
+    // 初期化
+    // =====================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      setupProj4();
+
+      // ライブラリ確認
+      const hasL = typeof L !== 'undefined';
+      const hasGT = typeof GeoTIFF !== 'undefined';
+      const hasPj4 = typeof proj4 !== 'undefined';
+      const ok = hasL && hasGT;
+      const lsEl = document.getElementById('lib-status');
+      lsEl.textContent = ok
+        ? '✅ 準備完了' + (hasPj4 ? '' : '（proj4なし）')
+        : '⚠️ ' + (!hasL ? 'Leaflet' : '') + (!hasGT ? ' GeoTIFF' : '') + ' 読み込み失敗';
+      lsEl.style.color = ok ? '#16a34a' : '#ef4444';
+
+      // ── 地図初期化 ──
+      const gsiPale   = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",         { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院淡色" });
+      const gsiStd    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",          { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院標準" });
+      const gsiRelief = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",       { maxNativeZoom: 15, maxZoom: 22, attribution: "地理院標高" });
+      const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",          { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
+      const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
+      const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",           { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
+      const esriStreet = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
+      const esriTopo   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",   { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
+      const openTopo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxNativeZoom: 17, maxZoom: 22, attribution: "©OpenTopoMap" });
+      const googleMap = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}", { maxNativeZoom: 20, maxZoom: 22, attribution: "©Google" });
+      const gsiPhoto = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",  { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院航空写真" });
+      const esriSat = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
+      const googleSat = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", { maxNativeZoom: 20, maxZoom: 22, subdomains: ["mt0","mt1","mt2","mt3"], attribution: "©Google" });
+
+      S.map = L.map('map', {center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, layers: [gsiPale], renderer: L.svg()});
+
+      const baseMaps = {
+        "🗺 国土地理院(淡色)": gsiPale, "🗺 国土地理院(標準)": gsiStd, "🗺 地理院色別標高図": gsiRelief,
+        "🗺 白地図(Carto)": cartoLight, "🗺 自然色地図(Voyager)": cartoVoyager, "🗺 ダーク地図(Carto)": cartoDark,
+        "🗺 Esri 道路地図": esriStreet, "🗺 Esri 地形図": esriTopo, "🗺 OpenTopoMap(地形)": openTopo,
+        "🗺 Google マップ": googleMap, "🛰 地理院最新航空写真": gsiPhoto, "🛰 衛星画像(Esri)": esriSat, "🛰 Google衛星画像": googleSat
+      };
+      L.control.layers(baseMaps, null, { position: 'bottomleft' }).addTo(S.map);
+
+      S.map.on('mousemove', e => {
+        document.getElementById('mc').textContent = e.latlng.lat.toFixed(4) + ', ' + e.latlng.lng.toFixed(4);
+      });
+
+      // Leaflet Draw
+      S.drawnItems = new L.FeatureGroup();
+      S.map.addLayer(S.drawnItems);
+      S.drawControl = new L.Control.Draw({
+        draw: {
+          polyline: false, polygon: true, circle: false, marker: false, circlemarker: false,
+          rectangle: { shapeOptions: { color: '#059669', weight: 2 } }
+        },
+        edit: false
+      });
+
+      S.map.on(L.Draw.Event.CREATED, function (e) {
+        S.drawnItems.clearLayers();
+        const layer = e.layer;
+        S.drawnItems.addLayer(layer);
+        computeHistogram(layer);
+      });
+
+      setupEvents();
+      setupResizer();
+    });
+
+    // =====================================================
+    // イベント登録
+    // =====================================================
+    function setupEvents() {
+      const dz = document.getElementById('dropZone');
+      const fi = document.getElementById('fileInput');
+
+      dz.addEventListener('click', () => fi.click());
+      dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', e => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        loadFiles(e.dataTransfer.files);
+      });
+      fi.addEventListener('change', e => {
+        if (e.target.files.length) loadFiles(e.target.files);
+        fi.value = '';
+      });
+
+      document.getElementById('tab-ndvi').addEventListener('click', () => switchMode('ndvi'));
+      document.getElementById('tab-single').addEventListener('click', () => switchMode('single'));
+      document.getElementById('computeBtn').addEventListener('click', computeNDVI);
+      document.getElementById('displayBtn').addEventListener('click', displaySingle);
+
+      document.getElementById('opacity').addEventListener('input', function () {
+        S.opacity = this.value / 100;
+        document.getElementById('opacityLabel').textContent = this.value + '%';
+        if (S.layer) S.layer.setOpacity(S.opacity);
+      });
+
+      // 描画ツール開始ボタン
+      document.getElementById('btn-draw').addEventListener('click', () => {
+        if (!S.currentData) {
+          setStatus('先に画像を計算・表示してください', 'error');
+          return;
+        }
+        new L.Draw.Rectangle(S.map, S.drawControl.options.draw.rectangle).enable();
+      });
+
+      document.getElementById('btn-clear-draw').addEventListener('click', () => {
+        S.drawnItems.clearLayers();
+        document.getElementById('chart-wrap').style.display = 'none';
+        if (tsChart) tsChart.destroy();
+      });
+
+      // ファイル削除: イベント委譲
+      document.getElementById('fileList').addEventListener('click', e => {
+        if (!e.target.classList.contains('del-btn')) return;
+        const name = e.target.closest('.file-item').dataset.name;
+        delete S.files[name];
+        renderFileList();
+        refreshSelects();
+        if (!Object.keys(S.files).length) {
+          document.getElementById('sec-files').style.display = 'none';
+          document.getElementById('sec-band').style.display = 'none';
+          document.getElementById('sec-stats').style.display = 'none';
+        }
+      });
+    }
+
+    function setupResizer() {
+      const resizer = document.getElementById('resizer');
+      const sidebar = document.getElementById('sidebar');
+      let isResizing = false;
+
+      resizer.addEventListener('mousedown', () => { isResizing = true; resizer.classList.add('active'); });
+      document.addEventListener('mousemove', e => {
+        if (!isResizing) return;
+        const newWidth = Math.max(280, Math.min(e.clientX, window.innerWidth - 100));
+        sidebar.style.width = newWidth + 'px';
+        if (S.map) S.map.invalidateSize();
+      });
+      document.addEventListener('mouseup', () => {
+        if (isResizing) { isResizing = false; resizer.classList.remove('active'); }
+      });
+    }
+
+    // =====================================================
+    // ファイル読み込み
+    // =====================================================
+    async function loadFiles(files) {
+      setStatus('読み込み中...', 'loading');
+      try {
+        for (const file of files) {
+          const buf = await file.arrayBuffer();
+          const tiff = await GeoTIFF.fromArrayBuffer(buf);
+          const img = await tiff.getImage();
+          const w = img.getWidth();
+          const h = img.getHeight();
+          const bands = img.getSamplesPerPixel();
+          const bbox = img.getBoundingBox();
+          const epsg = getEPSG(img);
+          const reprojBbox = toWGS84(bbox, epsg);
+          const data = await img.readRasters();
+
+          console.log('[loadFile]', file.name, {
+            size: w + '×' + h, bands,
+            rawBbox: bbox.map(v => +v.toFixed(2)),
+            epsg,
+            reprojBbox: {
+              W: reprojBbox.west.toFixed(5), S: reprojBbox.south.toFixed(5),
+              E: reprojBbox.east.toFixed(5), N: reprojBbox.north.toFixed(5)
+            }
+          });
+
+          S.files[file.name] = { data, width: w, height: h, bands, bbox, epsg, reprojBbox };
+        }
+
+        renderFileList();
+        refreshSelects();
+        document.getElementById('sec-band').style.display = '';
+        setStatus(Object.keys(S.files).length + ' 件のファイルが読み込まれました', 'ok');
+
+        // バンド数に応じた自動モード切替
+        const names = Object.keys(S.files);
+        if (names.length === 1) {
+          const f = S.files[names[0]];
+          if (f.bands === 1) {
+            switchMode('single');
+          } else if (f.bands >= 3) {
+            switchMode('single');
+            document.getElementById('colormap').value = 'rgb'; // RGB直接表示をデフォルトに
+          }
+        }
+
+      } catch (e) {
+        setStatus('エラー: ' + e.message, 'error');
+        console.error(e);
+      }
+    }
+
+    // =====================================================
+    // EPSG 取得・変換
+    // =====================================================
+    function getEPSG(img) {
+      const k = typeof img.getGeoKeys === 'function' ? img.getGeoKeys() : img.geoKeys;
+      console.log('[GeoTIFF] GeoKeys:', k);
+      if (!k) return null;
+      // 投影座標系
+      if (k.ProjectedCSTypeGeoKey && k.ProjectedCSTypeGeoKey !== 32767) return k.ProjectedCSTypeGeoKey;
+      // 地理座標系
+      if (k.GeographicTypeGeoKey && k.GeographicTypeGeoKey !== 32767) return k.GeographicTypeGeoKey;
+      // 地理座標キーの別名
+      if (k.GeogGeodeticDatumGeoKey === 6326) return 4326; // WGS84
+      if (k.GeogGeodeticDatumGeoKey === 6612) return 4612; // JGD2000
+      if (k.GeogGeodeticDatumGeoKey === 1128) return 6668; // JGD2011
+      return null;
+    }
+
+    // bbox値が投影座標系か緯度経度かを判定し、EPSGが不明な場合の推定を行う
+    function guessEPSGFromBBox(w, s, e, n, reportedEpsg) {
+      if (reportedEpsg) return reportedEpsg;
+      if (Math.abs(w) <= 180 && Math.abs(e) <= 180 &&
+          Math.abs(s) <= 90  && Math.abs(n) <= 90) return null; // 地理座標
+
+      const midX = (w + e) / 2;
+      const midY = (s + n) / 2;
+
+      // ─── EPSG:3857 (Web Mercator) 検出 ───
+      // 地球全域: |X|,|Y| ≤ 20037508。日本のX ≈ 14M〜17M, Y ≈ 3.5M〜5.8M
+      if (Math.abs(midX) > 2000000 || Math.abs(midY) > 2000000) {
+        if (typeof proj4 !== 'undefined' && proj4.defs('EPSG:3857')) {
+          try {
+            const [lon, lat] = proj4('EPSG:3857', 'EPSG:4326', [midX, midY]);
+            if (lon >= -180 && lon <= 180 && lat >= -85 && lat <= 85) {
+              console.warn('[EPSG] bbox から EPSG:3857 (Web Mercator) と推定。中心:', { lon: lon.toFixed(4), lat: lat.toFixed(4) });
+              return 3857;
+            }
+          } catch (_) {}
+        }
+      }
+
+      // ─── UTM / JGD TM 検出 ───
+      // 日本のUTM: easting≈200k〜800k、northing≈3.3M〜5.1M
+      if (w > 50000 && w < 1500000 && s > 500000) {
+        const candidates = [32653, 32654, 32652, 32651, 32655];
+        for (const epsg of candidates) {
+          const key = 'EPSG:' + epsg;
+          if (typeof proj4 !== 'undefined' && proj4.defs(key)) {
+            try {
+              const [lon, lat] = proj4(key, 'EPSG:4326', [midX, midY]);
+              if (lon >= 122 && lon <= 154 && lat >= 24 && lat <= 46) {
+                console.warn('[EPSG] bbox から UTM ゾーン推定:', epsg, { lon: lon.toFixed(4), lat: lat.toFixed(4) });
+                return epsg;
+              }
+            } catch (_) {}
+          }
+        }
+        const jgdCandidates = [6671, 6670, 6672, 6669, 6673, 6674];
+        for (const epsg of jgdCandidates) {
+          const key = 'EPSG:' + epsg;
+          if (typeof proj4 !== 'undefined' && proj4.defs(key)) {
+            try {
+              const [lon, lat] = proj4(key, 'EPSG:4326', [midX, midY]);
+              if (lon >= 122 && lon <= 154 && lat >= 24 && lat <= 46) {
+                console.warn('[EPSG] JGD2011 TM系 bbox 推定:', epsg);
+                return epsg;
+              }
+            } catch (_) {}
+          }
+        }
+        console.error('[EPSG] 投影座標と思われるがゾーン特定失敗。bbox:', [w,s,e,n]);
+      }
+      return null;
+    }
+
+    function toWGS84(bbox, epsg) {
+      const [w, s, e, n] = bbox;
+
+      // EPSGが不明なら bbox値から推定を試みる
+      const resolvedEpsg = guessEPSGFromBBox(w, s, e, n, epsg);
+      console.log('[toWGS84] bbox:', [w.toFixed(1), s.toFixed(1), e.toFixed(1), n.toFixed(1)], '→ EPSG:', resolvedEpsg);
+
+      const geo = new Set([4326, 4612, 6668, 4269, 4267]);
+      if (!resolvedEpsg || geo.has(resolvedEpsg)) {
+        // 緯度経度系：そのまま返す
+        // ただし south/north が逆になっている場合を補正
+        return {
+          west:  Math.min(w, e),
+          south: Math.min(s, n),
+          east:  Math.max(w, e),
+          north: Math.max(s, n)
+        };
+      }
+
+      const key = 'EPSG:' + resolvedEpsg;
+      if (typeof proj4 === 'undefined') {
+        console.warn('[toWGS84] proj4 未読込');
+        return { west: w, south: s, east: e, north: n };
+      }
+      if (!proj4.defs(key)) {
+        console.warn('[toWGS84] 定義なし:', key);
+        return { west: w, south: s, east: e, north: n };
+      }
+
+      try {
+        // 4隅すべて変換して正確な外接矩形を求める
+        const corners = [
+          proj4(key, 'EPSG:4326', [w, s]),
+          proj4(key, 'EPSG:4326', [e, s]),
+          proj4(key, 'EPSG:4326', [w, n]),
+          proj4(key, 'EPSG:4326', [e, n])
+        ];
+        const lons = corners.map(c => c[0]);
+        const lats = corners.map(c => c[1]);
+        const result = {
+          west:  Math.min(...lons),
+          south: Math.min(...lats),
+          east:  Math.max(...lons),
+          north: Math.max(...lats)
+        };
+
+        // 結果検証
+        if (!isFinite(result.west) || result.west < -180 || result.east > 180 ||
+            result.south < -90   || result.north > 90) {
+          console.error('[toWGS84] 変換結果が無効 (変換前の値を使用):', result);
+          return { west: w, south: s, east: e, north: n };
+        }
+
+        console.log('[toWGS84] ✅ 変換成功:', {
+          W: result.west.toFixed(5), S: result.south.toFixed(5),
+          E: result.east.toFixed(5), N: result.north.toFixed(5)
+        });
+        return result;
+      } catch (ex) {
+        console.error('[toWGS84] proj4 エラー:', ex);
+        return { west: w, south: s, east: e, north: n };
+      }
+    }
+
+    // =====================================================
+    // UI更新
+    // =====================================================
+    function renderFileList() {
+      const ul = document.getElementById('fileList');
+      ul.innerHTML = '';
+      for (const name in S.files) {
+        const f = S.files[name];
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        li.dataset.name = name;
+
+        const info = document.createElement('div');
+        info.className = 'file-item-info';
+        info.innerHTML =
+          '<div class="file-item-name" title="' + escHtml(name) + '">' + escHtml(shortName(name)) + '</div>' +
+          '<div class="file-item-meta">' + f.width + '×' + f.height + ' · ' + f.bands + 'バンド' +
+          '<span class="epsg-badge">' + (f.epsg ? 'EPSG:' + f.epsg : '不明') + '</span></div>';
+
+        const btn = document.createElement('button');
+        btn.className = 'del-btn';
+        btn.textContent = '削除';
+
+        li.appendChild(info);
+        li.appendChild(btn);
+        ul.appendChild(li);
+      }
+    }
+
+    function refreshSelects() {
+      ['redBand', 'nirBand', 'singleBand'].forEach(id => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = '<option value="">-- 選択 --</option>';
+        for (const name in S.files) {
+          const f = S.files[name];
+          for (let b = 0; b < f.bands; b++) {
+            const label = shortName(name) + ' — B' + (b + 1);
+            sel.appendChild(new Option(label, name + '\x00' + b));
+          }
+        }
+        if (sel.options.length > 1) sel.selectedIndex = 1;
+      });
+      const nir = document.getElementById('nirBand');
+      if (nir.options.length > 2) nir.selectedIndex = 2;
+    }
+
+    function parseBandVal(val) {
+      const i = val.lastIndexOf('\x00');
+      return [val.slice(0, i), parseInt(val.slice(i + 1), 10)];
+    }
+
+    function switchMode(mode) {
+      S.mode = mode;
+      document.getElementById('tab-ndvi').classList.toggle('active', mode === 'ndvi');
+      document.getElementById('tab-single').classList.toggle('active', mode === 'single');
+      document.getElementById('panel-ndvi').style.display = mode === 'ndvi' ? '' : 'none';
+      document.getElementById('panel-single').style.display = mode === 'single' ? '' : 'none';
+    }
+
+    // =====================================================
+    // 処理
+    // =====================================================
+    async function computeNDVI() {
+      const rv = document.getElementById('redBand').value;
+      const nv = document.getElementById('nirBand').value;
+      if (!rv || !nv) { setStatus('バンドを選択してください', 'error'); return; }
+
+      setStatus('NDVI 計算中...', 'loading');
+      document.getElementById('computeBtn').disabled = true;
+      await tick();
+
+      try {
+        const [rFile, rIdx] = parseBandVal(rv);
+        const [nFile, nIdx] = parseBandVal(nv);
+        const red = S.files[rFile].data[rIdx];
+        const nir = S.files[nFile].data[nIdx];
+        const { width, height, reprojBbox, epsg } = S.files[rFile];
+
+        const ndvi = new Float32Array(width * height);
+        let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity;
+        for (let i = 0; i < red.length; i++) {
+          const r = red[i], n = nir[i];
+          const v = (r + n < 1) ? 0 : (n - r) / (n + r);
+          ndvi[i] = v; sum += v; cnt++;
+          if (v < mn) mn = v;
+          if (v > mx) mx = v;
+        }
+
+        S.currentData = ndvi;
+        S.currentBbox = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
+        S.currentWidth = width;
+        S.currentHeight = height;
+
+        showStats(mn, mx, sum / cnt, epsg);
+        renderOverlay(ndvi, width, height, reprojBbox, 'ndvi', mn, mx);
+        drawColorbar('ndvi', mn, mx, 'NDVI 値');
+        setStatus('✅ NDVI 計算完了', 'ok');
+      } catch (e) {
+        setStatus('エラー: ' + e.message, 'error');
+        console.error(e);
+      }
+      document.getElementById('computeBtn').disabled = false;
+    }
+
+    async function displaySingle() {
+      const sv = document.getElementById('singleBand').value;
+      if (!sv) { setStatus('バンドを選択してください', 'error'); return; }
+
+      setStatus('描画中...', 'loading');
+      document.getElementById('displayBtn').disabled = true;
+      await tick();
+
+      try {
+        const [fname, bidx] = parseBandVal(sv);
+        const { data, width, height, reprojBbox, epsg, bands } = S.files[fname];
+        const cmap = document.getElementById('colormap').value;
+
+        // ── RGB直接表示モード ──
+        if (cmap === 'rgb') {
+          if (bands < 3) {
+            setStatus('RGB表示には3バンド以上のファイルが必要です', 'error');
+            document.getElementById('displayBtn').disabled = false;
+            return;
+          }
+          S.currentData = data[0]; // ヒストグラム用（Rバンド）
+          S.currentBbox = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
+          S.currentWidth = width;
+          S.currentHeight = height;
+          renderRGBOverlay(data, width, height, reprojBbox);
+          document.getElementById('map-legend').style.display = 'none';
+          setStatus('✅ RGB合成表示完了 (EPSG:' + (epsg || '推定') + ')', 'ok');
+          document.getElementById('sec-stats').style.display = 'none';
+          document.getElementById('displayBtn').disabled = false;
+          return;
+        }
+
+        // ── 単バンド表示モード ──
+        const band = data[bidx];
+        let mn = Infinity, mx = -Infinity, sum = 0, cnt = 0;
+        for (let i = 0; i < band.length; i++) {
+          const v = band[i];
+          if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; sum += v; cnt++; }
+        }
+        if (!isFinite(mn)) { mn = 0; mx = 1; }
+
+        S.currentData = band;
+        S.currentBbox = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
+        S.currentWidth = width;
+        S.currentHeight = height;
+
+        showStats(mn, mx, sum / cnt, epsg);
+        renderOverlay(band, width, height, reprojBbox, cmap, mn, mx);
+        drawColorbar(cmap, mn, mx, cmap === 'ndvi' ? 'NDVI 値' : '値');
+        setStatus('✅ 表示完了', 'ok');
+      } catch (e) {
+        setStatus('エラー: ' + e.message, 'error');
+        console.error(e);
+      }
+      document.getElementById('displayBtn').disabled = false;
+    }
+
+    function renderRGBOverlay(data, w, h, bb) {
+      if (S.layer) { S.map.removeLayer(S.layer); S.layer = null; }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+      const px = imgData.data;
+
+      const r = data[0], g = data[1], b = data[2];
+      const len = r.length;
+      for (let i = 0; i < len; i++) {
+        px[i * 4]     = r[i];
+        px[i * 4 + 1] = g[i];
+        px[i * 4 + 2] = b[i];
+        px[i * 4 + 3] = r[i] === 0 && g[i] === 0 && b[i] === 0 ? 0 : 220; // 黒(nodata)透過
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      const bounds = [[bb.south, bb.west], [bb.north, bb.east]];
+      console.log('[renderRGBOverlay] Leaflet bounds:', bounds);
+      S.layer = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: S.opacity }).addTo(S.map);
+      S.map.fitBounds(bounds);
+    }
+
+    // =====================================================
+    // 描画・可視化
+    // =====================================================
+    function renderOverlay(data, w, h, bb, cmap, mn, mx) {
+      if (S.layer) { S.map.removeLayer(S.layer); S.layer = null; }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const px = img.data;
+      const range = (mx - mn) || 1;
+
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i];
+        const t = Math.max(0, Math.min(1, (v - mn) / range));
+        const [r, g, b] = applyColormap(cmap, t, v);
+        px[i * 4] = r; px[i * 4 + 1] = g; px[i * 4 + 2] = b; px[i * 4 + 3] = 220;
+      }
+      ctx.putImageData(img, 0, 0);
+
+      const bounds = [[bb.south, bb.west], [bb.north, bb.east]];
+      S.layer = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: S.opacity }).addTo(S.map);
+      S.map.fitBounds(bounds);
+    }
+
+    function applyColormap(name, t, raw) {
+      switch (name) {
+        case 'ndvi':
+          if (raw < -0.2) return [100, 100, 100];
+          if (raw < 0) return [150, 150, 255];
+          if (raw < 0.2) return [190, 170, 120];
+          if (raw < 0.4) return [255, 255, 180];
+          if (raw < 0.6) return [144, 238, 144];
+          if (raw < 0.8) return [50, 205, 50];
+          return [0, 100, 0];
+        case 'gray': { const g = Math.round(t * 255); return [g, g, g]; }
+        case 'hot':
+          if (t < 0.33) { const s = t / 0.33; return [Math.round(s * 255), 0, 0]; }
+          if (t < 0.66) { const s = (t - .33) / .33; return [255, Math.round(s * 255), 0]; }
+          { const s = (t - .66) / .34; return [255, 255, Math.round(s * 255)]; }
+        case 'blue':
+          return [20, Math.round(t * 150 + 50), Math.round(t * 205 + 50)];
+        case 'spectral':
+          if (t < .25) { const s = t / .25; return [0, Math.round(s * 255), 255]; }
+          if (t < .5) { const s = (t - .25) / .25; return [0, 255, Math.round((1 - s) * 255)]; }
+          if (t < .75) { const s = (t - .5) / .25; return [Math.round(s * 255), 255, 0]; }
+          { const s = (t - .75) / .25; return [255, Math.round((1 - s) * 255), 0]; }
+        default: return [128, 128, 128];
+      }
+    }
+
+    function drawColorbar(cmap, mn, mx, title) {
+      document.getElementById('map-legend').style.display = '';
+      document.getElementById('leg-title').textContent = title;
+
+      const canvas = document.getElementById('leg-canvas');
+      canvas.width = 200;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      for (let x = 0; x < W; x++) {
+        const t = x / (W - 1);
+        const [r, g, b] = applyColormap(cmap, t, mn + t * (mx - mn));
+        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+        ctx.fillRect(x, 0, 1, 12);
+      }
+      document.getElementById('l-min').textContent = mn.toFixed(2);
+      document.getElementById('l-mid').textContent = ((mn + mx) / 2).toFixed(2);
+      document.getElementById('l-max').textContent = mx.toFixed(2);
+    }
+
+    function showStats(mn, mx, mean, epsg) {
+      document.getElementById('vMin').textContent = isFinite(mn) ? mn.toFixed(4) : '—';
+      document.getElementById('vMax').textContent = isFinite(mx) ? mx.toFixed(4) : '—';
+      document.getElementById('vMean').textContent = isFinite(mean) ? mean.toFixed(4) : '—';
+      document.getElementById('vEPSG').textContent = epsg ? 'EPSG:' + epsg : '不明';
+      document.getElementById('sec-stats').style.display = '';
+    }
+
+    // =====================================================
+    // ヒストグラム (領域統計)
+    // =====================================================
+    function computeHistogram(layer) {
+      if (!S.currentData || !S.currentBbox) return;
+
+      const bounds = layer.getBounds();
+      const W = S.currentWidth, H = S.currentHeight;
+      const [west, south, east, north] = S.currentBbox;
+
+      const qWest = bounds.getWest();
+      const qEast = bounds.getEast();
+      const qSouth = bounds.getSouth();
+      const qNorth = bounds.getNorth();
+
+      const dx = (east - west) / W;
+      const dy = (north - south) / H;
+
+      const vals = [];
+      for (let y = 0; y < H; y++) {
+        const lat = north - y * dy;
+        if (lat < qSouth || lat > qNorth) continue;
+        for (let x = 0; x < W; x++) {
+          const lng = west + x * dx;
+          if (lng < qWest || lng > qEast) continue;
+          
+          // is point inside polygon?
+          if (layer instanceof L.Polygon && !(layer instanceof L.Rectangle)) {
+            // Simplified: for exact polygon we'd ray-cast. 
+            // We'll stick to bounding box filtering for speed unless needed.
+          }
+          
+          const v = S.currentData[y * W + x];
+          if (isFinite(v)) vals.push(v);
+        }
+      }
+
+      if (vals.length === 0) {
+        setStatus('選択範囲内にデータがありません', 'error');
+        return;
+      }
+
+      const bins = 20;
+      let min = Math.min(...vals), max = Math.max(...vals);
+      if (min === max) { min -= 0.1; max += 0.1; }
+      const step = (max - min) / bins;
+      const counts = new Array(bins).fill(0);
+
+      for (const v of vals) {
+        let b = Math.floor((v - min) / step);
+        if (b >= bins) b = bins - 1;
+        if (b < 0) b = 0;
+        counts[b]++;
+      }
+
+      const labels = Array.from({ length: bins }, (_, i) => (min + (i + 0.5) * step).toFixed(2));
+      drawChart(labels, counts);
+      setStatus(`範囲内のピクセル数: ${vals.length} (${(min).toFixed(2)} 〜 ${(max).toFixed(2)})`, 'ok');
+    }
+
+    function drawChart(labels, data) {
+      document.getElementById('chart-wrap').style.display = '';
+      if (tsChart) tsChart.destroy();
+      const ctx = document.getElementById('hist-chart').getContext('2d');
+      tsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'ピクセル数',
+            data: data,
+            backgroundColor: '#059669'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { display: true }, y: { display: true } }
+        }
+      });
+    }
+
+    // =====================================================
+    // ユーティリティ
+    // =====================================================
+    function setStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+    function shortName(p) { return p.split(/[/\\]/).pop(); }
+    function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function tick() { return new Promise(r => setTimeout(r, 20)); }
+  </script>
+</body>
+
+</html>
