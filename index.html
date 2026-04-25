@@ -378,7 +378,7 @@ function buildTileExpr(dateStart, dateEnd) {
       },
       filtered: {
         functionInvocationValue: {
-          functionName: 'ImageCollection.filterDate',
+          functionName: 'Collection.filterDate',
           arguments: {
             collection: { valueReference: 'col' },
             start: { constantValue: dateStart },
@@ -388,7 +388,7 @@ function buildTileExpr(dateStart, dateEnd) {
       },
       img: { 
         functionInvocationValue: { 
-          functionName: 'ImageCollection.first',
+          functionName: 'Collection.first',
           arguments: { collection: { valueReference: 'filtered' } } 
         } 
       },
@@ -429,7 +429,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
       },
       filtered: {
         functionInvocationValue: {
-          functionName: 'ImageCollection.filterDate',
+          functionName: 'Collection.filterDate',
           arguments: {
             collection: { valueReference: 'col' },
             start: { constantValue: dateStart },
@@ -439,7 +439,7 @@ function buildValueExpr(dateStart, dateEnd, lat, lng) {
       },
       img: { 
         functionInvocationValue: { 
-          functionName: 'ImageCollection.first', 
+          functionName: 'Collection.first',
           arguments: { collection: { valueReference: 'filtered' } } 
         } 
       },
