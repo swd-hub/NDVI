@@ -508,7 +508,10 @@ async function renderNDVI() {
   try {
     // 1) GEE でマップ作成 → mapId 取得
     const expr = buildTileExpr(dateStart, dateEnd);
-    const resp = await geePost('maps', { expression: expr });
+    const resp = await geePost('maps', { 
+      expression: expr,
+      fileFormat: 'PNG'
+    });
     // resp.name = "projects/{proj}/maps/{uuid}"
 
     // 2) 既存レイヤーを削除
