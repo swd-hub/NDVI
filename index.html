@@ -151,6 +151,12 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
       <!-- 観測月 -->
       <div class="sh">観測月 (MODIS MOD13A3)</div>
       <div class="month-disp" id="monthDisp">---- / --</div>
+      <div class="year-row" style="margin-bottom:8px;">
+        <span>年:</span>
+        <select id="yearSelect"></select>
+        <span>月:</span>
+        <select id="monthSelect"></select>
+      </div>
       <input type="range" id="monthSlider" min="0" max="0" value="0">
       <div class="date-range-label"><span id="dateMin">--</span><span id="dateMax">--</span></div>
 
@@ -281,11 +287,57 @@ function fmtNext(d)  {
 // ── スライダー ──
 const slider  = document.getElementById('monthSlider');
 const monthEl = document.getElementById('monthDisp');
+const yearSel = document.getElementById('yearSelect');
+const monthSel = document.getElementById('monthSelect');
+
 slider.min = 0; slider.max = DATES.length - 1; slider.value = DATES.length - 1;
 document.getElementById('dateMin').textContent = fmtDisp(DATES[0]);
 document.getElementById('dateMax').textContent = fmtDisp(DATES[DATES.length-1]);
 monthEl.textContent = fmtDisp(DATES[DATES.length-1]);
-slider.addEventListener('input', () => monthEl.textContent = fmtDisp(DATES[+slider.value]));
+
+// 年と月のドロップダウンを生成（allYears は下で定義）
+function initMonthSelector() {
+  yearSel.innerHTML = allYears.map(y => `<option value="${y}">${y}</option>`).join('');
+  yearSel.value = allYears[allYears.length - 1]; // 最新年を選択
+
+  // 月の選択肢を動的に生成
+  function updateMonthOptions() {
+    const selectedYear = +yearSel.value;
+    const monthsInYear = DATES.filter(d => d.getUTCFullYear() === selectedYear);
+    const months = [...new Set(monthsInYear.map(d => d.getUTCMonth() + 1))].sort((a,b) => a - b);
+    monthSel.innerHTML = months.map(m => `<option value="${m}">${String(m).padStart(2,'0')}</option>`).join('');
+    monthSel.value = months[months.length - 1]; // 最新月を選択
+    updateSliderFromDropdowns();
+  }
+
+  // ドロップダウンからスライダーを更新
+  function updateSliderFromDropdowns() {
+    const year = +yearSel.value;
+    const month = +monthSel.value;
+    const idx = DATES.findIndex(d => d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month);
+    if (idx >= 0) {
+      slider.value = idx;
+      monthEl.textContent = fmtDisp(DATES[idx]);
+    }
+  }
+
+  // スライダーからドロップダウンを更新
+  function updateDropdownsFromSlider() {
+    const date = DATES[+slider.value];
+    yearSel.value = date.getUTCFullYear();
+    updateMonthOptions();
+    monthSel.value = date.getUTCMonth() + 1;
+    monthEl.textContent = fmtDisp(date);
+  }
+
+  // イベントリスナー
+  yearSel.addEventListener('change', updateMonthOptions);
+  monthSel.addEventListener('change', updateSliderFromDropdowns);
+  slider.addEventListener('input', updateDropdownsFromSlider);
+
+  // 初期化
+  updateMonthOptions();
+}
 
 // ── 年フィルター ──
 const yfrom = document.getElementById('chartYearFrom');
@@ -294,6 +346,9 @@ const allYears = [...new Set(DATES.map(d => d.getUTCFullYear()))].sort();
 yfrom.innerHTML = yto.innerHTML = allYears.map(y => `<option value="${y}">${y}</option>`).join('');
 yfrom.value = allYears[Math.max(0, allYears.length-5)];
 yto.value   = allYears[allYears.length-1];
+
+// ── 観測月セレクタを初期化 ──
+initMonthSelector();
 
 // ── プリセット ──
 const PRESETS = {
