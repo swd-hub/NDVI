@@ -148,6 +148,13 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
         <button class="btn-auth" id="btn-auth" onclick="requestAuth()">🔑 Google ログイン (GEE)</button>
       </div>
 
+      <!-- データソース選択 -->
+      <div class="sh">データソース</div>
+      <div class="preset-grid" style="margin-bottom:10px;">
+        <button class="pbtn on" onclick="selectDataSource('modis',this)">📊 MODIS (1km/月)</button>
+        <button class="pbtn" onclick="selectDataSource('sentinel',this)">🛰 Sentinel-2 (10m/5日)</button>
+      </div>
+
       <!-- 観測月 -->
       <div class="sh">観測月 (MODIS MOD13A3)</div>
       <div class="month-disp" id="monthDisp">---- / --</div>
@@ -258,12 +265,40 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
 // ============================================================
 
 const GEE_BASE       = 'https://earthengine.googleapis.com/v1';
+
+// ── MODIS MOD13A3 (1km月次) ──
 const MODIS_COL      = 'MODIS/061/MOD13A3';
 const NDVI_BAND      = 'NDVI';
-const NDVI_RAW_MIN   = -2000;   // MOD13A3 raw range
+const NDVI_RAW_MIN   = -2000;
 const NDVI_RAW_MAX   =  9000;
-const NDVI_SCALE     = 0.0001;  // → actual NDVI value
-const NDVI_FILL      = -28672;  // fill value
+const NDVI_SCALE     = 0.0001;
+const NDVI_FILL      = -28672;
+
+// ── Sentinel-2 (10m, 5日) ──
+const SENTINEL_COL   = 'COPERNICUS/S2_SR_HARMONIZED';
+const SENTINEL_B4    = 'B4';  // Red
+const SENTINEL_B8    = 'B8';  // NIR
+// NDVI = (NIR - Red) / (NIR + Red)
+
+// ── 現在のデータソース ──
+let currentDataSource = 'modis';
+
+function selectDataSource(source, el) {
+  currentDataSource = source;
+  document.querySelectorAll('.preset-grid:first-of-type .pbtn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  
+  // 説明を更新
+  if (source === 'sentinel') {
+    document.getElementById('dateMin').textContent = '2015-06-27';
+    document.getElementById('dateMax').textContent = fmtDisp(new Date());
+    setStatus('Sentinel-2: 2015年以降、5日ごと、雲の影響を受けやすいためQAマスク推奨', 'ok');
+  } else {
+    document.getElementById('dateMin').textContent = fmtDisp(DATES[0]);
+    document.getElementById('dateMax').textContent = fmtDisp(DATES[DATES.length-1]);
+    setStatus('MODIS MOD13A3: 2000年以降、月次、クラウドマスク済み', 'ok');
+  }
+}
 
 // ── 日付リスト (2000-03 〜 前月) ──
 function buildDates() {
@@ -425,45 +460,149 @@ async function geePost(endpoint, body) {
 
 // ── EE Expression ビルダー ──
 
-/** NDVI タイル可視化用 (最新のMOD13A3を取得) */
+/** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
-  return {
-    values: {
-      col: { 
-        functionInvocationValue: { 
-          functionName: 'ImageCollection.load',
-          arguments: { id: { constantValue: MODIS_COL } } 
-        } 
+  if (currentDataSource === 'sentinel') {
+    // Sentinel-2 NDVI計算 (NIR-Red)/(NIR+Red)
+    return {
+      values: {
+        col: {
+          functionInvocationValue: {
+            functionName: 'ImageCollection.load',
+            arguments: { id: { constantValue: SENTINEL_COL } }
+          }
+        },
+        filtered: {
+          functionInvocationValue: {
+            functionName: 'Collection.filterDate',
+            arguments: {
+              collection: { valueReference: 'col' },
+              start: { constantValue: dateStart },
+              end: { constantValue: dateEnd }
+            }
+          }
+        },
+        cloudMasked: {
+          functionInvocationValue: {
+            functionName: 'ImageCollection.map',
+            arguments: {
+              collection: { valueReference: 'filtered' },
+              mapper: {
+                functionDefinition: {
+                  argument: [{ name: 'img' }],
+                  body: {
+                    functionInvocationValue: {
+                      functionName: 'Image.updateMask',
+                      arguments: {
+                        input: { valueReference: 'img' },
+                        mask: {
+                          functionInvocationValue: {
+                            functionName: 'Image.select',
+                            arguments: {
+                              input: { valueReference: 'img' },
+                              bandSelectors: { constantValue: ['SCL'] },
+                              end: { constantValue: 1 }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        img: {
+          functionInvocationValue: {
+            functionName: 'Collection.first',
+            arguments: { collection: { valueReference: 'cloudMasked' } }
+          }
+        },
+        nir: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: [SENTINEL_B8] }
+            }
+          }
+        },
+        red: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: [SENTINEL_B4] }
+            }
+          }
+        },
+        ndvi: {
+          functionInvocationValue: {
+            functionName: 'Image.expression',
+            arguments: {
+              expression: { constantValue: '(nir - red) / (nir + red)' },
+              vars: {
+                nir: { valueReference: 'nir' },
+                red: { valueReference: 'red' }
+              }
+            }
+          }
+        },
+        '0': {
+          functionInvocationValue: {
+            functionName: 'Image.visualize',
+            arguments: {
+              image: { valueReference: 'ndvi' },
+              min: { constantValue: -1 },
+              max: { constantValue: 1 },
+              palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
+            }
+          }
+        }
       },
-      img: { 
-        functionInvocationValue: { 
-          functionName: 'Collection.first',
-          arguments: { collection: { valueReference: 'col' } } 
-        } 
+      result: '0'
+    };
+  } else {
+    // MODIS MOD13A3 (元のコード)
+    return {
+      values: {
+        col: {
+          functionInvocationValue: {
+            functionName: 'ImageCollection.load',
+            arguments: { id: { constantValue: MODIS_COL } }
+          }
+        },
+        img: {
+          functionInvocationValue: {
+            functionName: 'Collection.first',
+            arguments: { collection: { valueReference: 'col' } }
+          }
+        },
+        sel: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: [NDVI_BAND] }
+            }
+          }
+        },
+        '0': {
+          functionInvocationValue: {
+            functionName: 'Image.visualize',
+            arguments: {
+              image: { valueReference: 'sel' },
+              min: { constantValue: ndviMinRaw },
+              max: { constantValue: ndviMaxRaw },
+              palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
+            }
+          }
+        }
       },
-      sel: { 
-        functionInvocationValue: { 
-          functionName: 'Image.select',
-          arguments: { 
-            input: { valueReference: 'img' },
-            bandSelectors: { constantValue: [NDVI_BAND] } 
-          } 
-        } 
-      },
-      '0': { 
-        functionInvocationValue: { 
-          functionName: 'Image.visualize',
-          arguments: { 
-            image: { valueReference: 'sel' },
-            min: { constantValue: ndviMinRaw },
-            max: { constantValue: ndviMaxRaw },
-            palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] } 
-          } 
-        } 
-      }
-    },
-    result: '0'
-  };
+      result: '0'
+    };
+  }
 }
 
 /** 1ポイント × NDVI 値取得用 */
