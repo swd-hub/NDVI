@@ -549,6 +549,17 @@ async function renderNDVI() {
     document.getElementById('leg-title').textContent    = `NDVI 分布 — ${monthStr} (MODIS)`;
     document.getElementById('mi-month').textContent     = monthStr;
     document.getElementById('s-month').textContent      = monthStr;
+    
+    // 凡例のラベルを NDVI 範囲に合わせて更新
+    const ndviMin = +document.getElementById('ndvi-min').value;
+    const ndviMax = +document.getElementById('ndvi-max').value;
+    const legLabels = document.getElementById('map-legend').querySelector('.leg-labels');
+    const min25 = (ndviMin + ndviMax * 0 / 4).toFixed(2);
+    const min50 = (ndviMin + ndviMax * 1 / 4).toFixed(2);
+    const min75 = (ndviMin + ndviMax * 2 / 4).toFixed(2);
+    const max25 = (ndviMin + ndviMax * 3 / 4).toFixed(2);
+    legLabels.innerHTML = `<span>${ndviMin.toFixed(2)}</span><span>${min25}</span><span>${min50}</span><span>${max25}</span><span>${ndviMax.toFixed(2)}</span>`;
+    
     document.getElementById('stats-wrap').style.display = '';
     document.getElementById('chart-wrap').style.display = '';
     map.fitBounds([[s,w],[n,e]]);
