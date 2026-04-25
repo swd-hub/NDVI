@@ -156,8 +156,12 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
 
       <!-- NDVIスケール -->
       <div class="sh">NDVI カラースケール</div>
+      <div class="bbox-grid">
+        <div class="ctrl"><label>最小値</label><input type="number" id="ndvi-min" value="-0.2" step="0.05" min="-1" max="1"></div>
+        <div class="ctrl"><label>最大値</label><input type="number" id="ndvi-max" value="0.9" step="0.05" min="-1" max="1"></div>
+      </div>
       <div class="ndvi-colorbar"></div>
-      <div class="ndvi-labels"><span>-0.2 裸地/水</span><span>0.0</span><span>0.5</span><span>0.9 濃植生</span></div>
+      <div class="ndvi-labels"><span id="ndvi-label-min">-0.2</span><span>0.0</span><span>0.5</span><span id="ndvi-label-max">0.9</span></div>
 
       <!-- プリセット -->
       <div class="sh">地域プリセット</div>
@@ -367,7 +371,7 @@ async function geePost(endpoint, body) {
 // ── EE Expression ビルダー ──
 
 /** NDVI タイル可視化用 (最新のMOD13A3を取得) */
-function buildTileExpr(dateStart, dateEnd) {
+function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   return {
     values: {
       col: { 
@@ -396,8 +400,8 @@ function buildTileExpr(dateStart, dateEnd) {
           functionName: 'Image.visualize',
           arguments: { 
             image: { valueReference: 'sel' },
-            min: { constantValue: NDVI_RAW_MIN },
-            max: { constantValue: NDVI_RAW_MAX },
+            min: { constantValue: ndviMinRaw },
+            max: { constantValue: ndviMaxRaw },
             palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] } 
           } 
         } 
@@ -502,6 +506,15 @@ async function renderNDVI() {
   bbox = [w, s, e, n];
   updateBboxRect();
 
+  // NDVI 範囲を取得
+  const ndviMin = +document.getElementById('ndvi-min').value;
+  const ndviMax = +document.getElementById('ndvi-max').value;
+  if (ndviMin >= ndviMax) { setStatus('NDVI 範囲が不正です', 'error'); return; }
+  
+  // 生の値に変換
+  const ndviMinRaw = Math.round(ndviMin / NDVI_SCALE);
+  const ndviMaxRaw = Math.round(ndviMax / NDVI_SCALE);
+
   const date      = DATES[+slider.value];
   const dateStart = fmtISO(date);
   const dateEnd   = fmtNext(date);
@@ -513,7 +526,7 @@ async function renderNDVI() {
 
   try {
     // 1) GEE でマップ作成 → mapId 取得
-    const expr = buildTileExpr(dateStart, dateEnd);
+    const expr = buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw);
     const resp = await geePost('maps', { 
       expression: expr,
       fileFormat: 'PNG'
@@ -702,6 +715,16 @@ window.addEventListener('mouseup',   () => { isResizing=false; resizer.classList
     const wv=+document.getElementById('bboxW').value, sv=+document.getElementById('bboxS').value;
     const ev=+document.getElementById('bboxE').value, nv=+document.getElementById('bboxN').value;
     if(!isNaN(wv)&&!isNaN(sv)&&!isNaN(ev)&&!isNaN(nv)&&wv<ev&&sv<nv) { bbox=[wv,sv,ev,nv]; updateBboxRect(); }
+  });
+});
+
+// NDVI 範囲の入力
+['ndvi-min','ndvi-max'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const minVal = document.getElementById('ndvi-min').value;
+    const maxVal = document.getElementById('ndvi-max').value;
+    document.getElementById('ndvi-label-min').textContent = minVal;
+    document.getElementById('ndvi-label-max').textContent = maxVal;
   });
 });
 
