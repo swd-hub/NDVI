@@ -472,20 +472,10 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { id: { constantValue: SENTINEL_COL } }
           }
         },
-        filtered: {
-          functionInvocationValue: {
-            functionName: 'Collection.filterDate',
-            arguments: {
-              collection: { valueReference: 'col' },
-              start: { constantValue: dateStart },
-              end: { constantValue: dateEnd }
-            }
-          }
-        },
         img: {
           functionInvocationValue: {
             functionName: 'Collection.first',
-            arguments: { collection: { valueReference: 'filtered' } }
+            arguments: { collection: { valueReference: 'col' } }
           }
         },
         ndvi: {
