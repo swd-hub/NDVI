@@ -464,7 +464,7 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 NDVI計算 (NIR-Red)/(NIR+Red)
+    // Sentinel-2 NDVI計算 (B8-B4)/(B8+B4)
     return {
       values: {
         col: {
@@ -479,11 +479,20 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
+        selected: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: ['B8', 'B4'] }
+            }
+          }
+        },
         ndvi: {
           functionInvocationValue: {
             functionName: 'Image.normalizedDifference',
             arguments: {
-              image: { valueReference: 'img' },
+              input: { valueReference: 'selected' },
               bandA: { constantValue: 'B8' },
               bandB: { constantValue: 'B4' }
             }
