@@ -473,8 +473,8 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 NDVI計算 (B8-B4)/(B8+B4)
-    // シンプルなアプローチ：最初の画像を取得してそのまま NDVI を計算
+    // Sentinel-2 NDVI計算
+    // 方法：select で両バンドを取得 → 両バンドの差分で NDVI 計算
     return {
       values: {
         col: {
@@ -489,15 +489,49 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
+        nir: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: ['B8'] }
+            }
+          }
+        },
+        red: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: ['B4'] }
+            }
+          }
+        },
+        // (B8 - B4) / (B8 + B4)
+        diff: {
+          functionInvocationValue: {
+            functionName: 'Image.subtract',
+            arguments: {
+              image1: { valueReference: 'nir' },
+              image2: { valueReference: 'red' }
+            }
+          }
+        },
+        sum: {
+          functionInvocationValue: {
+            functionName: 'Image.add',
+            arguments: {
+              image1: { valueReference: 'nir' },
+              image2: { valueReference: 'red' }
+            }
+          }
+        },
         ndvi: {
           functionInvocationValue: {
-            functionName: 'Image.expression',
+            functionName: 'Image.divide',
             arguments: {
-              expression: { constantValue: '(B8.float() - B4.float()) / (B8.float() + B4.float())' },
-              vars: { 
-                B8: { valueReference: 'img' },
-                B4: { valueReference: 'img' }
-              }
+              image1: { valueReference: 'diff' },
+              image2: { valueReference: 'sum' }
             }
           }
         },
