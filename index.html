@@ -275,29 +275,38 @@ const NDVI_SCALE     = 0.0001;
 const NDVI_FILL      = -28672;
 
 // ── Sentinel-2 (10m, 5日) ──
-const SENTINEL_COL   = 'COPERNICUS/S2_SR_HARMONIZED';
-const SENTINEL_B4    = 'B4';  // Red
-const SENTINEL_B8    = 'B8';  // NIR
-// NDVI = (NIR - Red) / (NIR + Red)
+// 複数のコレクション名を試す（サーバーの応答で判定）
+const SENTINEL_COLS = [
+  'COPERNICUS/S2_SR_HARMONIZED',  // 2023年以降（最新）
+  'COPERNICUS/S2_SR',              // 2017年以降（大気補正済み）
+  'COPERNICUS/S2'                  // 2015年以降（生データ）
+];
+let SENTINEL_COL = SENTINEL_COLS[1]; // デフォルトは S2_SR
 
 // ── 現在のデータソース ──
 let currentDataSource = 'modis';
 
 function selectDataSource(source, el) {
   currentDataSource = source;
+  console.log('[selectDataSource] 切り替え:', source);  // ← デバッグ
+  
   // el の親要素 (.preset-grid) 内のすべての .pbtn から on クラスを削除
-  el.parentElement.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+  el.parentElement.querySelectorAll('.pbtn').forEach(b => {
+    b.classList.remove('on');
+    console.log('[selectDataSource] on クラス削除:', b.textContent);  // ← デバッグ
+  });
   el.classList.add('on');
+  console.log('[selectDataSource] on クラス追加:', el.textContent);  // ← デバッグ
   
   // 説明を更新
   if (source === 'sentinel') {
     document.getElementById('dateMin').textContent = '2015-06-27';
     document.getElementById('dateMax').textContent = fmtDisp(new Date());
-    setStatus('Sentinel-2: 2015年以降、5日ごと、最新画像を表示', 'ok');
+    setStatus('✓ Sentinel-2 に切り替えました（2015年以降、5日ごと、最新画像）', 'ok');
   } else {
     document.getElementById('dateMin').textContent = fmtDisp(DATES[0]);
     document.getElementById('dateMax').textContent = fmtDisp(DATES[DATES.length-1]);
-    setStatus('MODIS MOD13A3: 2000年以降、月次、クラウドマスク済み', 'ok');
+    setStatus('✓ MODIS に切り替えました（2000年以降、月次、クラウドマスク済み）', 'ok');
   }
 }
 
@@ -465,6 +474,7 @@ async function geePost(endpoint, body) {
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
     // Sentinel-2 NDVI計算 (B8-B4)/(B8+B4)
+    // シンプルなアプローチ：最初の画像を取得してそのまま NDVI を計算
     return {
       values: {
         col: {
@@ -479,21 +489,15 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        selected: {
-          functionInvocationValue: {
-            functionName: 'Image.select',
-            arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B8', 'B4'] }
-            }
-          }
-        },
         ndvi: {
           functionInvocationValue: {
-            functionName: 'Image.normalizedDifference',
+            functionName: 'Image.expression',
             arguments: {
-              input: { valueReference: 'selected' },
-              bandNames: { constantValue: ['B8', 'B4'] }
+              expression: { constantValue: '(B8.float() - B4.float()) / (B8.float() + B4.float())' },
+              vars: { 
+                B8: { valueReference: 'img' },
+                B4: { valueReference: 'img' }
+              }
             }
           }
         },
@@ -629,17 +633,34 @@ const AuthTileLayer = L.GridLayer.extend({
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = sz;
     const url = `${GEE_BASE}/${this._mapName}/tiles/${coords.z}/${coords.x}/${coords.y}`;
+    
+    // タイムアウト設定（20秒）
+    const timeoutId = setTimeout(() => {
+      console.warn('[AuthTileLayer] タイル取得タイムアウト:', coords);
+      done(null, canvas);
+    }, 20000);
+    
     fetch(url, { headers: { Authorization: `Bearer ${this._token}` } })
-      .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+      .then(r => { 
+        clearTimeout(timeoutId);
+        if (!r.ok) throw new Error(r.status); 
+        return r.blob(); 
+      })
       .then(blob => createImageBitmap(blob))
       .then(bmp  => { canvas.getContext('2d').drawImage(bmp, 0, 0); done(null, canvas); })
-      .catch(err => { console.error('[AuthTileLayer]', err); done(null, canvas); }); // エラー時は空タイル
+      .catch(err => { 
+        clearTimeout(timeoutId);
+        console.error('[AuthTileLayer] エラー:', err, coords); 
+        done(null, canvas); 
+      });
     return canvas;
   }
 });
 
 // ── 描画メイン ──
 async function renderNDVI() {
+  console.log('[renderNDVI] 開始: currentDataSource =', currentDataSource);  // ← デバッグ
+  
   const w = +document.getElementById('bboxW').value;
   const s = +document.getElementById('bboxS').value;
   const e = +document.getElementById('bboxE').value;
@@ -669,10 +690,12 @@ async function renderNDVI() {
   try {
     // 1) GEE でマップ作成 → mapId 取得
     const expr = buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw);
+    console.log('[renderNDVI] Expression:', expr);  // ← デバッグ
     const resp = await geePost('maps', { 
       expression: expr,
       fileFormat: 'PNG'
     });
+    console.log('[renderNDVI] レスポンス:', resp);  // ← デバッグ
     // resp.name = "projects/{proj}/maps/{uuid}"
 
     // 2) 既存レイヤーを削除
@@ -682,13 +705,12 @@ async function renderNDVI() {
     const opacity = +document.getElementById('opacitySlider').value / 100;
     ndviLayer = new AuthTileLayer(resp.name, accessToken, { opacity });
     ndviLayer.addTo(map);
-    ndviLayer.bringToFront();  // ← 前面に表示
 
     ndviLayer.on('loading', () => setStatus(`タイル取得中 ... ${monthStr}`, 'loading'));
-    ndviLayer.on('load',    () => setStatus(`表示完了 — ${monthStr} | MODIS MOD13A3 1km`, 'ok'));
+    ndviLayer.on('load',    () => setStatus(`表示完了 — ${monthStr} | ${currentDataSource === 'sentinel' ? 'Sentinel-2 10m' : 'MODIS MOD13A3 1km'}`, 'ok'));
 
     document.getElementById('map-legend').style.display = '';
-    document.getElementById('leg-title').textContent    = `NDVI 分布 — ${monthStr} (MODIS)`;
+    document.getElementById('leg-title').textContent    = `NDVI 分布 — ${monthStr} (${currentDataSource === 'sentinel' ? 'Sentinel-2' : 'MODIS'})`;
     document.getElementById('mi-month').textContent     = monthStr;
     document.getElementById('s-month').textContent      = monthStr;
     
@@ -708,8 +730,14 @@ async function renderNDVI() {
     setStatus(`描画開始 — ${monthStr} | タイル読み込み中...`, 'loading');
 
   } catch (err) {
+    console.error('[renderNDVI] エラー詳細:', err);
     setStatus('描画エラー: ' + err.message, 'error');
-    console.error('[renderNDVI]', err);
+    
+    // Sentinel-2 の場合、別のコレクション名を提案
+    if (currentDataSource === 'sentinel') {
+      console.warn('Sentinel-2 が失敗しました。別のコレクション名を試してください:', SENTINEL_COLS);
+      alert('Sentinel-2 のコレクション名を変更する必要があります。\n詳細はコンソール（F12）を確認してください。');
+    }
   }
   btn.disabled = false;
 }
