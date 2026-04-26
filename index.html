@@ -473,8 +473,8 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 NDVI計算 (REST API対応版)
-    // 注: REST APIは filterDate 非対応のため、全コレクションから最新画像を取得
+    // Sentinel-2 B4(RED)バンド表示 (デバッグ用・単純化版)
+    // 注: 複雑なNDVI計算がGEE REST APIで問題あるため、単純なバンド表示で確認
     return {
       values: {
         col: {
@@ -489,60 +489,24 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        nir: {
+        // B4(RED) と B8(NIR) を選択
+        rgbn: {
           functionInvocationValue: {
             functionName: 'Image.select',
             arguments: {
               input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B8'] }
+              bandSelectors: { constantValue: ['B4', 'B3', 'B2'] }
             }
           }
         },
-        red: {
-          functionInvocationValue: {
-            functionName: 'Image.select',
-            arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B4'] }
-            }
-          }
-        },
-        // (B8 - B4) / (B8 + B4)
-        diff: {
-          functionInvocationValue: {
-            functionName: 'Image.subtract',
-            arguments: {
-              image1: { valueReference: 'nir' },
-              image2: { valueReference: 'red' }
-            }
-          }
-        },
-        sum: {
-          functionInvocationValue: {
-            functionName: 'Image.add',
-            arguments: {
-              image1: { valueReference: 'nir' },
-              image2: { valueReference: 'red' }
-            }
-          }
-        },
-        ndvi: {
-          functionInvocationValue: {
-            functionName: 'Image.divide',
-            arguments: {
-              image1: { valueReference: 'diff' },
-              image2: { valueReference: 'sum' }
-            }
-          }
-        },
+        // RGB として可視化
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
             arguments: {
-              image: { valueReference: 'ndvi' },
-              min: { constantValue: -0.2 },
-              max: { constantValue: 0.9 },
-              palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
+              image: { valueReference: 'rgbn' },
+              min: { constantValue: 0 },
+              max: { constantValue: 3000 }
             }
           }
         }
@@ -772,7 +736,7 @@ const AuthTileLayer = L.GridLayer.extend({
     
     fetch(url, { headers: { Authorization: `Bearer ${this._token}` } })
       .then(r => { 
-        console.log(`[AuthTileLayer] レスポンス受信: z=${coords.z}, x=${coords.x}, y=${coords.y}, status=${r.status}`);
+        console.log(`[AuthTileLayer] レスポンス受信: z=${coords.z}, x=${coords.x}, y=${coords.y}, status=${r.status}, content-type=${r.headers.get('content-type')}`);
         clearTimeout(timeoutId);
         if (!r.ok) {
           console.error(`[AuthTileLayer] HTTP エラー ${r.status}:`, r.statusText);
@@ -781,17 +745,33 @@ const AuthTileLayer = L.GridLayer.extend({
         return r.blob(); 
       })
       .then(blob => {
-        console.log(`[AuthTileLayer] Blob 取得: サイズ=${blob.size} bytes`);
+        console.log(`[AuthTileLayer] Blob 取得: サイズ=${blob.size} bytes, type=${blob.type}`);
+        
+        // ✅ blob の内容をチェック（エラー JSON の場合を検出）
+        if (blob.size < 500 && blob.type !== 'image/png' && blob.type !== 'image/jpeg') {
+          // エラーレスポンスの可能性 → テキストとして読み取り
+          return blob.text().then(text => {
+            console.error('[AuthTileLayer] エラーレスポンス:', text);
+            throw new Error(`API Error: ${text.substring(0, 200)}`);
+          });
+        }
+        
         return createImageBitmap(blob);
       })
       .then(bmp  => { 
         console.log(`[AuthTileLayer] ImageBitmap 作成成功: z=${coords.z}, x=${coords.x}, y=${coords.y}`);
-        canvas.getContext('2d').drawImage(bmp, 0, 0); 
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error('[AuthTileLayer] Canvas context 取得失敗');
+          done(null, canvas);
+          return;
+        }
+        ctx.drawImage(bmp, 0, 0); 
         done(null, canvas); 
       })
       .catch(err => { 
         clearTimeout(timeoutId);
-        console.error('[AuthTileLayer] エラー:', err, 'coords:', coords); 
+        console.error('[AuthTileLayer] エラー:', err.message, 'coords:', coords); 
         done(null, canvas); 
       });
     return canvas;
@@ -837,6 +817,12 @@ async function renderNDVI() {
       fileFormat: 'PNG'
     });
     console.log('[renderNDVI] レスポンス:', resp);  // ← デバッグ
+    console.log('[renderNDVI] 返却された mapName:', resp.name);  // ← 追加デバッグ
+    
+    // resp.name が undefined でないか確認
+    if (!resp.name) {
+      throw new Error('GEE API がマップを作成できませんでした。レスポンスを確認してください: ' + JSON.stringify(resp));
+    }
     // resp.name = "projects/{proj}/maps/{uuid}"
 
     // 2) 既存レイヤーを削除
