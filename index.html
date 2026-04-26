@@ -152,7 +152,8 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
       <div class="sh">データソース</div>
       <div class="preset-grid" style="margin-bottom:10px;">
         <button class="pbtn on" onclick="selectDataSource('modis',this)">📊 MODIS (1km/月)</button>
-        <button class="pbtn" onclick="selectDataSource('sentinel',this)">🛰 Sentinel-2 (10m/5日)</button>
+        <!-- Sentinel-2 は REST API の問題により一時無効化 -->
+        <!-- <button class="pbtn" onclick="selectDataSource('sentinel',this)">🛰 Sentinel-2 (10m/5日)</button> -->
       </div>
 
       <!-- 観測月 -->
@@ -473,23 +474,28 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 RGB合成版（B4赤, B3緑, B2青）
-    // MODISとは異なり、複数バンドから RGB 合成する必要がある
+    // Sentinel-2 RGB合成版（GEE Code Editor で確認済み）
+    // var sentinel = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').first();
+    // var rgb = sentinel.select(['B4', 'B3', 'B2']);
+    // Map.addLayer(rgb, {min: 0, max: 2500}, 'RGB');
+    
     return {
       values: {
+        // Step 1: コレクション読み込み
         col: {
           functionInvocationValue: {
             functionName: 'ImageCollection.load',
             arguments: { id: { constantValue: SENTINEL_COL } }
           }
         },
+        // Step 2: 最初の画像を取得
         img: {
           functionInvocationValue: {
             functionName: 'Collection.first',
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        // RGB バンド（B4赤, B3緑, B2青）を選択
+        // Step 3: RGB バンドを選択
         rgb: {
           functionInvocationValue: {
             functionName: 'Image.select',
@@ -499,7 +505,7 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             }
           }
         },
-        // RGB として可視化
+        // Step 4: 可視化
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
