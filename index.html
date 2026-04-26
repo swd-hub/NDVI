@@ -493,8 +493,7 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             functionName: 'Image.normalizedDifference',
             arguments: {
               input: { valueReference: 'selected' },
-              bandA: { constantValue: 'B8' },
-              bandB: { constantValue: 'B4' }
+              bandNames: { constantValue: ['B8', 'B4'] }
             }
           }
         },
