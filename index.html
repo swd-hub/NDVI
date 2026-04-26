@@ -760,6 +760,16 @@ async function renderNDVI() {
     
     document.getElementById('stats-wrap').style.display = '';
     document.getElementById('chart-wrap').style.display = '';
+    
+    // 統計情報を更新
+    const resolutionText = currentDataSource === 'sentinel' ? '10m' : '~1km';
+    const sourceText = currentDataSource === 'sentinel' ? 'Sentinel-2' : 'MODIS MOD13A3';
+    const scards = document.querySelectorAll('.scard');
+    if (scards.length >= 3) {
+      scards[1].querySelector('.sv').textContent = resolutionText;
+      scards[2].querySelector('.sv').textContent = sourceText;
+    }
+    
     map.fitBounds([[s,w],[n,e]]);
     setStatus(`描画開始 — ${monthStr} | タイル読み込み中...`, 'loading');
 
