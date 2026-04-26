@@ -473,8 +473,7 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 NDVI計算
-    // 方法：select で両バンドを取得 → 両バンドの差分で NDVI 計算
+    // Sentinel-2 NDVI計算 with 日付フィルタ
     return {
       values: {
         col: {
@@ -483,10 +482,20 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { id: { constantValue: SENTINEL_COL } }
           }
         },
+        filtered: {
+          functionInvocationValue: {
+            functionName: 'Collection.filterDate',
+            arguments: {
+              collection: { valueReference: 'col' },
+              start: { constantValue: dateStart },
+              end: { constantValue: dateEnd }
+            }
+          }
+        },
         img: {
           functionInvocationValue: {
             functionName: 'Collection.first',
-            arguments: { collection: { valueReference: 'col' } }
+            arguments: { collection: { valueReference: 'filtered' } }
           }
         },
         nir: {
@@ -540,8 +549,8 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             functionName: 'Image.visualize',
             arguments: {
               image: { valueReference: 'ndvi' },
-              min: { constantValue: -1 },
-              max: { constantValue: 1 },
+              min: { constantValue: -0.2 },
+              max: { constantValue: 0.9 },
               palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
             }
           }
@@ -593,61 +602,165 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
 
 /** 1ポイント × NDVI 値取得用 */
 function buildValueExpr(dateStart, dateEnd, lat, lng) {
-  return {
-    values: {
-      col: { 
-        functionInvocationValue: { 
-          functionName: 'ImageCollection.load',
-          arguments: { id: { constantValue: MODIS_COL } } 
-        } 
-      },
-      img: { 
-        functionInvocationValue: { 
-          functionName: 'Collection.first',
-          arguments: { collection: { valueReference: 'col' } } 
-        } 
-      },
-      sel: { 
-        functionInvocationValue: { 
-          functionName: 'Image.select',
-          arguments: { 
-            input: { valueReference: 'img' },
-            bandSelectors: { constantValue: [NDVI_BAND] } 
+  if (currentDataSource === 'sentinel') {
+    // Sentinel-2 NDVI値取得
+    return {
+      values: {
+        col: { 
+          functionInvocationValue: { 
+            functionName: 'ImageCollection.load',
+            arguments: { id: { constantValue: SENTINEL_COL } } 
           } 
-        } 
-      },
-      pt: { 
-        functionInvocationValue: { 
-          functionName: 'GeometryConstructors.Point',
-          arguments: { coordinates: { constantValue: [lng, lat] } } 
-        } 
-      },
-      reduced: { 
-        functionInvocationValue: { 
-          functionName: 'Image.reduceRegion',
-          arguments: { 
-            image: { valueReference: 'sel' },
-            reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments: {} } },
-            geometry: { valueReference: 'pt' },
-            scale: { constantValue: 1000 },
-            bestEffort: { constantValue: true } 
+        },
+        filtered: {
+          functionInvocationValue: {
+            functionName: 'Collection.filterDate',
+            arguments: {
+              collection: { valueReference: 'col' },
+              start: { constantValue: dateStart },
+              end: { constantValue: dateEnd }
+            }
+          }
+        },
+        img: { 
+          functionInvocationValue: { 
+            functionName: 'Collection.first',
+            arguments: { collection: { valueReference: 'filtered' } } 
           } 
-        } 
-      },
-      '0': { 
-        functionInvocationValue: { 
-          functionName: 'Dictionary.get',
-          arguments: { 
-            object: { valueReference: 'reduced' },
-            key: { constantValue: NDVI_BAND } 
+        },
+        nir: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: ['B8'] }
+            }
+          }
+        },
+        red: {
+          functionInvocationValue: {
+            functionName: 'Image.select',
+            arguments: {
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: ['B4'] }
+            }
+          }
+        },
+        diff: {
+          functionInvocationValue: {
+            functionName: 'Image.subtract',
+            arguments: {
+              image1: { valueReference: 'nir' },
+              image2: { valueReference: 'red' }
+            }
+          }
+        },
+        sum: {
+          functionInvocationValue: {
+            functionName: 'Image.add',
+            arguments: {
+              image1: { valueReference: 'nir' },
+              image2: { valueReference: 'red' }
+            }
+          }
+        },
+        ndvi: {
+          functionInvocationValue: {
+            functionName: 'Image.divide',
+            arguments: {
+              image1: { valueReference: 'diff' },
+              image2: { valueReference: 'sum' }
+            }
+          }
+        },
+        pt: { 
+          functionInvocationValue: { 
+            functionName: 'GeometryConstructors.Point',
+            arguments: { coordinates: { constantValue: [lng, lat] } } 
           } 
-        } 
-      }
-    },
-    result: '0'
-  };
+        },
+        reduced: { 
+          functionInvocationValue: { 
+            functionName: 'Image.reduceRegion',
+            arguments: { 
+              image: { valueReference: 'ndvi' },
+              reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments: {} } },
+              geometry: { valueReference: 'pt' },
+              scale: { constantValue: 10 },
+              bestEffort: { constantValue: true } 
+            } 
+          } 
+        },
+        '0': { 
+          functionInvocationValue: { 
+            functionName: 'Dictionary.get',
+            arguments: { 
+              object: { valueReference: 'reduced' },
+              key: { constantValue: 'B8' }
+            } 
+          } 
+        }
+      },
+      result: '0'
+    };
+  } else {
+    // MODIS MOD13A3 (元のコード)
+    return {
+      values: {
+        col: { 
+          functionInvocationValue: { 
+            functionName: 'ImageCollection.load',
+            arguments: { id: { constantValue: MODIS_COL } } 
+          } 
+        },
+        img: { 
+          functionInvocationValue: { 
+            functionName: 'Collection.first',
+            arguments: { collection: { valueReference: 'col' } } 
+          } 
+        },
+        sel: { 
+          functionInvocationValue: { 
+            functionName: 'Image.select',
+            arguments: { 
+              input: { valueReference: 'img' },
+              bandSelectors: { constantValue: [NDVI_BAND] } 
+            } 
+          } 
+        },
+        pt: { 
+          functionInvocationValue: { 
+            functionName: 'GeometryConstructors.Point',
+            arguments: { coordinates: { constantValue: [lng, lat] } } 
+          } 
+        },
+        reduced: { 
+          functionInvocationValue: { 
+            functionName: 'Image.reduceRegion',
+            arguments: { 
+              image: { valueReference: 'sel' },
+              reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments: {} } },
+              geometry: { valueReference: 'pt' },
+              scale: { constantValue: 1000 },
+              bestEffort: { constantValue: true } 
+            } 
+          } 
+        },
+        '0': { 
+          functionInvocationValue: { 
+            functionName: 'Dictionary.get',
+            arguments: { 
+              object: { valueReference: 'reduced' },
+              key: { constantValue: NDVI_BAND } 
+            } 
+          } 
+        }
+      },
+      result: '0'
+    };
+  }
 }
-  
+
 // ── 認証付きタイルレイヤー (カスタム L.GridLayer) ──
 const AuthTileLayer = L.GridLayer.extend({
   options: { tileSize: 256, opacity: 0.8, zIndex: 999 },
