@@ -281,7 +281,7 @@ const SENTINEL_COLS = [
   'COPERNICUS/S2_SR',              // 2017年以降（大気補正済み）
   'COPERNICUS/S2'                  // 2015年以降（生データ）
 ];
-let SENTINEL_COL = SENTINEL_COLS[2]; // COPERNICUS/S2; // デフォルトは S2_SR
+let SENTINEL_COL = SENTINEL_COLS[0]; // 最新版（S2_SR_HARMONIZED）を使用
 
 // ── 現在のデータソース ──
 let currentDataSource = 'modis';
@@ -473,8 +473,8 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 B4(RED) バンド単純表示版
-    // 複雑な計算を避けて、単純なバンド表示で動作確認
+    // Sentinel-2 RGB合成版（B4赤, B3緑, B2青）
+    // MODISとは異なり、複数バンドから RGB 合成する必要がある
     return {
       values: {
         col: {
@@ -489,24 +489,24 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        // B4 のみを選択
-        b4: {
+        // RGB バンド（B4赤, B3緑, B2青）を選択
+        rgb: {
           functionInvocationValue: {
             functionName: 'Image.select',
             arguments: {
               input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B4'] }
+              bandSelectors: { constantValue: ['B4', 'B3', 'B2'] }
             }
           }
         },
-        // グレースケール表示
+        // RGB として可視化
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
             arguments: {
-              image: { valueReference: 'b4' },
+              image: { valueReference: 'rgb' },
               min: { constantValue: 0 },
-              max: { constantValue: 3000 }
+              max: { constantValue: 2500 }
             }
           }
         }
