@@ -668,23 +668,36 @@ const AuthTileLayer = L.GridLayer.extend({
     canvas.width = canvas.height = sz;
     const url = `${GEE_BASE}/${this._mapName}/tiles/${coords.z}/${coords.x}/${coords.y}`;
     
-    // タイムアウト設定（20秒）
+    console.log(`[AuthTileLayer] タイル取得開始: z=${coords.z}, x=${coords.x}, y=${coords.y}, URL=${url}`);
+    
+    // タイムアウト設定（30秒）
     const timeoutId = setTimeout(() => {
       console.warn('[AuthTileLayer] タイル取得タイムアウト:', coords);
       done(null, canvas);
-    }, 20000);
+    }, 30000);
     
     fetch(url, { headers: { Authorization: `Bearer ${this._token}` } })
       .then(r => { 
+        console.log(`[AuthTileLayer] レスポンス受信: z=${coords.z}, x=${coords.x}, y=${coords.y}, status=${r.status}`);
         clearTimeout(timeoutId);
-        if (!r.ok) throw new Error(r.status); 
+        if (!r.ok) {
+          console.error(`[AuthTileLayer] HTTP エラー ${r.status}:`, r.statusText);
+          throw new Error(`HTTP ${r.status}`);
+        }
         return r.blob(); 
       })
-      .then(blob => createImageBitmap(blob))
-      .then(bmp  => { canvas.getContext('2d').drawImage(bmp, 0, 0); done(null, canvas); })
+      .then(blob => {
+        console.log(`[AuthTileLayer] Blob 取得: サイズ=${blob.size} bytes`);
+        return createImageBitmap(blob);
+      })
+      .then(bmp  => { 
+        console.log(`[AuthTileLayer] ImageBitmap 作成成功: z=${coords.z}, x=${coords.x}, y=${coords.y}`);
+        canvas.getContext('2d').drawImage(bmp, 0, 0); 
+        done(null, canvas); 
+      })
       .catch(err => { 
         clearTimeout(timeoutId);
-        console.error('[AuthTileLayer] エラー:', err, coords); 
+        console.error('[AuthTileLayer] エラー:', err, 'coords:', coords); 
         done(null, canvas); 
       });
     return canvas;
