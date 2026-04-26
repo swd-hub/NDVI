@@ -473,8 +473,8 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 B4(RED)バンド表示 (デバッグ用・単純化版)
-    // 注: 複雑なNDVI計算がGEE REST APIで問題あるため、単純なバンド表示で確認
+    // Sentinel-2 B4(RED) バンド単純表示版
+    // 複雑な計算を避けて、単純なバンド表示で動作確認
     return {
       values: {
         col: {
@@ -489,22 +489,22 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        // B4(RED) と B8(NIR) を選択
-        rgbn: {
+        // B4 のみを選択
+        b4: {
           functionInvocationValue: {
             functionName: 'Image.select',
             arguments: {
               input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B4', 'B3', 'B2'] }
+              bandSelectors: { constantValue: ['B4'] }
             }
           }
         },
-        // RGB として可視化
+        // グレースケール表示
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
             arguments: {
-              image: { valueReference: 'rgbn' },
+              image: { valueReference: 'b4' },
               min: { constantValue: 0 },
               max: { constantValue: 3000 }
             }
@@ -747,12 +747,19 @@ const AuthTileLayer = L.GridLayer.extend({
       .then(blob => {
         console.log(`[AuthTileLayer] Blob 取得: サイズ=${blob.size} bytes, type=${blob.type}`);
         
-        // ✅ blob の内容をチェック（エラー JSON の場合を検出）
-        if (blob.size < 500 && blob.type !== 'image/png' && blob.type !== 'image/jpeg') {
-          // エラーレスポンスの可能性 → テキストとして読み取り
+        // ✅ blob の内容をチェック（エラー判定）
+        if (blob.size < 1000) {
+          // 小さすぎる → エラー画像またはキャッシュ画像の可能性
+          // テキストとして読み込んでみる
           return blob.text().then(text => {
-            console.error('[AuthTileLayer] エラーレスポンス:', text);
-            throw new Error(`API Error: ${text.substring(0, 200)}`);
+            console.error('[AuthTileLayer] Blob内容（テキスト）:', text.substring(0, 500));
+            // テキストなら JSON エラーか何かかもしれない
+            if (text.includes('error') || text.includes('Error') || text.startsWith('{')) {
+              throw new Error(`API Error or Invalid Response: ${text.substring(0, 100)}`);
+            }
+            // 画像データが小さい → 表示できないが続行
+            console.warn('[AuthTileLayer] 画像が小さすぎます（透明？）');
+            return createImageBitmap(blob);
           });
         }
         
