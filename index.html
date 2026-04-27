@@ -473,8 +473,10 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 NDVI計算版（手動計算）
-    // NDVI = (B8 - B4) / (B8 + B4)
+    // Sentinel-2 RGB合成版（GEE Code Editor で動作確認済み）
+    // var sentinel = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').first();
+    // var rgb = sentinel.select(['B4', 'B3', 'B2']);
+    // Map.addLayer(rgb, {min: 0, max: 2500}, 'RGB');
     return {
       values: {
         col: {
@@ -489,65 +491,22 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        // B8 (NIR) を選択
-        b8: {
+        rgb: {
           functionInvocationValue: {
             functionName: 'Image.select',
             arguments: {
               input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B8'] }
+              bandSelectors: { constantValue: ['B4', 'B3', 'B2'] }
             }
           }
         },
-        // B4 (RED) を選択
-        b4: {
-          functionInvocationValue: {
-            functionName: 'Image.select',
-            arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B4'] }
-            }
-          }
-        },
-        // B8 - B4
-        diff: {
-          functionInvocationValue: {
-            functionName: 'Image.subtract',
-            arguments: {
-              image1: { valueReference: 'b8' },
-              image2: { valueReference: 'b4' }
-            }
-          }
-        },
-        // B8 + B4
-        sum: {
-          functionInvocationValue: {
-            functionName: 'Image.add',
-            arguments: {
-              image1: { valueReference: 'b8' },
-              image2: { valueReference: 'b4' }
-            }
-          }
-        },
-        // (B8 - B4) / (B8 + B4) = NDVI
-        ndvi: {
-          functionInvocationValue: {
-            functionName: 'Image.divide',
-            arguments: {
-              image1: { valueReference: 'diff' },
-              image2: { valueReference: 'sum' }
-            }
-          }
-        },
-        // 可視化
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
             arguments: {
-              image: { valueReference: 'ndvi' },
-              min: { constantValue: -0.2 },
-              max: { constantValue: 0.9 },
-              palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
+              image: { valueReference: 'rgb' },
+              min: { constantValue: 0 },
+              max: { constantValue: 2500 }
             }
           }
         }
