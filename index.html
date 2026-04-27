@@ -473,8 +473,8 @@ async function geePost(endpoint, body) {
 /** NDVI タイル可視化用 */
 function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
   if (currentDataSource === 'sentinel') {
-    // Sentinel-2 RGB合成版（B4赤, B3緑, B2青）
-    // MODISとは異なり、複数バンドから RGB 合成する必要がある
+    // Sentinel-2 NDVI計算版（Image.normalizedDifference使用）
+    // (B8 - B4) / (B8 + B4) を計算
     return {
       values: {
         col: {
@@ -489,24 +489,25 @@ function buildTileExpr(dateStart, dateEnd, ndviMinRaw, ndviMaxRaw) {
             arguments: { collection: { valueReference: 'col' } }
           }
         },
-        // RGB バンド（B4赤, B3緑, B2青）を選択
-        rgb: {
+        // NDVI計算: (B8 - B4) / (B8 + B4)
+        ndvi: {
           functionInvocationValue: {
-            functionName: 'Image.select',
+            functionName: 'Image.normalizedDifference',
             arguments: {
-              input: { valueReference: 'img' },
-              bandSelectors: { constantValue: ['B4', 'B3', 'B2'] }
+              image: { valueReference: 'img' },
+              bandNames: { constantValue: ['B8', 'B4'] }
             }
           }
         },
-        // RGB として可視化
+        // 可視化
         '0': {
           functionInvocationValue: {
             functionName: 'Image.visualize',
             arguments: {
-              image: { valueReference: 'rgb' },
-              min: { constantValue: 0 },
-              max: { constantValue: 2500 }
+              image: { valueReference: 'ndvi' },
+              min: { constantValue: -0.2 },
+              max: { constantValue: 0.9 },
+              palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
             }
           }
         }
