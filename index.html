@@ -1,346 +1,89 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NDVI Analyzer — NASA GIBS版</title>
-
+<title>NDVI Test - Tile Layer Check</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap');
-
-:root {
-  --bg:#ffffff;
-  --panel:#f8fafc;
-  --border:#cbd5e1;
-  --accent:#059669;
-  --green:#16a34a;
-  --text:#0f172a;
-  --muted:#64748b;
-}
-
-*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-body {
-  background:var(--bg);
-  color:var(--text);
-  font-family:'Noto Sans JP',sans-serif;
-  height:100vh;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
-
-header {
-  display:flex;
-  align-items:center;
-  padding:10px 16px;
-  background:var(--panel);
-  border-bottom:1px solid var(--border);
-  z-index:1000;
-  height:50px;
-}
-
-header h1 {
-  font-family:'Space Mono',monospace;
-  font-size:0.9rem;
-  font-weight:700;
-}
-
-header h1 em {
-  color:var(--accent);
-  font-style:normal;
-}
-
-.app-body {
-  display:flex;
-  flex:1;
-  overflow:hidden;
-}
-
-.side {
-  width:320px;
-  background:var(--panel);
-  border-right:1px solid var(--border);
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
-
-.side-scroll {
-  flex:1;
-  overflow-y:auto;
-  padding:14px;
-}
-
-.sh {
-  font-family:'Space Mono',monospace;
-  font-size:0.6rem;
-  letter-spacing:.16em;
-  text-transform:uppercase;
-  color:var(--accent);
-  margin:14px 0 8px;
-  font-weight:700;
-  border-bottom:1px solid var(--border);
-  padding-bottom:6px;
-}
-
-.preset-grid {
-  display:grid;
-  grid-template-columns:1fr;
-  gap:6px;
-  margin-bottom:12px;
-}
-
-.pbtn {
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:6px;
-  padding:8px;
-  font-size:0.75rem;
-  font-weight:600;
-  cursor:pointer;
-  transition:all 0.2s;
-}
-
-.pbtn:hover {
-  background:var(--panel);
-  border-color:var(--accent);
-}
-
-.pbtn.on {
-  background:var(--accent);
-  color:#fff;
-  border-color:var(--accent);
-}
-
-.ctrl {
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:8px;
-  margin-bottom:10px;
-}
-
-.ctrl-item {
-  display:flex;
-  flex-direction:column;
-}
-
-.ctrl-item label {
-  font-size:0.65rem;
-  color:var(--muted);
-  font-weight:700;
-  margin-bottom:3px;
-}
-
-.ctrl-item input {
-  border:1px solid var(--border);
-  border-radius:4px;
-  padding:6px;
-  font-size:0.8rem;
-  font-family:'Space Mono',monospace;
-}
-
-.btn-render {
-  width:100%;
-  background:var(--accent);
-  color:#fff;
-  border:none;
-  border-radius:8px;
-  padding:12px;
-  font-size:0.85rem;
-  font-weight:700;
-  cursor:pointer;
-  margin-top:10px;
-  transition:0.2s;
-}
-
-.btn-render:hover {
-  background:var(--green);
-}
-
-.btn-render:disabled {
-  background:#94a3b8;
-  cursor:not-allowed;
-}
-
-.status {
-  font-size:0.68rem;
-  margin-top:10px;
-  padding:8px;
-  border-radius:4px;
-  background:#fff;
-  border:1px solid var(--border);
-  font-family:'Space Mono',monospace;
-  line-height:1.4;
-  color:var(--text);
-}
-
-.ndvi-colorbar {
-  height:12px;
-  border-radius:3px;
-  background:linear-gradient(to right, #8B4513, #D2B48C, #F5F5DC, #90EE90, #32CD32, #006400);
-  margin:8px 0 4px;
-  border:1px solid rgba(0,0,0,0.1);
-}
-
-.ndvi-labels {
-  display:flex;
-  justify-content:space-between;
-  font-size:0.57rem;
-  color:var(--muted);
-  font-family:'Space Mono',monospace;
-}
-
-#map { flex:1; }
-
-.map-legend {
-  position:absolute;
-  bottom:42px;
-  right:12px;
-  z-index:900;
-  background:rgba(255,255,255,0.95);
-  border:1px solid var(--border);
-  border-radius:8px;
-  padding:10px;
-  min-width:200px;
-  box-shadow:0 2px 10px rgba(0,0,0,0.1);
-  display:none;
-}
-
-.map-legend.show {
-  display:block;
+body { margin: 0; padding: 0; }
+#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+.info {
+  padding: 10px;
+  background: rgba(255,255,255,0.9);
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 12px;
+  max-width: 300px;
 }
 </style>
 </head>
 <body>
-
-<header>
-  <span>🛰️</span>
-  <h1 style="margin-left:8px;">NDVI Analyzer <em>[NASA GIBS]</em></h1>
-  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);">無料・認証不要</div>
-</header>
-
-<div class="app-body">
-  <div class="side">
-    <div class="side-scroll">
-      <div class="sh">データソース</div>
-      <div class="preset-grid">
-        <button class="pbtn on">🌾 NDVI（MODIS/Sentinel）</button>
-      </div>
-
-      <div class="sh">プリセット地域</div>
-      <div class="preset-grid">
-        <button class="pbtn" onclick="setLocation(35.367, 132.755, '出雲市')">📍 出雲市</button>
-        <button class="pbtn" onclick="setLocation(35.460, 139.770, '東京')">📍 東京</button>
-        <button class="pbtn" onclick="setLocation(34.690, 135.195, '京都')">📍 京都</button>
-      </div>
-
-      <div class="sh">解析範囲</div>
-      <div class="ctrl">
-        <div class="ctrl-item"><label>西（W）</label><input type="number" id="bbox-w" value="132.70" step="0.01"></div>
-        <div class="ctrl-item"><label>南（S）</label><input type="number" id="bbox-s" value="35.35" step="0.01"></div>
-      </div>
-      <div class="ctrl">
-        <div class="ctrl-item"><label>東（E）</label><input type="number" id="bbox-e" value="132.80" step="0.01"></div>
-        <div class="ctrl-item"><label>北（N）</label><input type="number" id="bbox-n" value="35.40" step="0.01"></div>
-      </div>
-
-      <div class="sh">NDVI カラースケール</div>
-      <div class="ndvi-colorbar"></div>
-      <div class="ndvi-labels">
-        <span>低</span>
-        <span>中</span>
-        <span>高</span>
-      </div>
-
-      <button class="btn-render" onclick="renderNDVI()">🚀 NDVI を表示</button>
-      <div class="status" id="status">準備完了。プリセットを選ぶか「表示」をクリックしてください。</div>
-    </div>
-  </div>
-
-  <div id="map"></div>
-
-  <div class="map-legend" id="map-legend">
-    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI インデックス</div>
-    <div class="ndvi-colorbar"></div>
-    <div class="ndvi-labels"><span>低（茶）</span><span>中（黄）</span><span>高（緑）</span></div>
-  </div>
-</body>
+<div id="map"></div>
+<div class="info">
+  <div><strong>Tile Layer Test</strong></div>
+  <div id="status">Loading...</div>
+  <button onclick="testOSM()">Test OpenStreetMap</button>
+  <button onclick="testNDVI()">Test NASA NDVI</button>
+  <button onclick="testSentinel()">Test Sentinel</button>
+</div>
 
 <script>
-// ─── Map Setup ───
-const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-  attribution: '地理院標準'
-});
-const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
-  attribution: '地理院淡色'
-});
-const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-  attribution: 'Google'
-});
+const map = L.map('map').setView([35.367, 132.755], 10);
+let currentLayer = null;
 
-const map = L.map('map', {
-  center: [35.367, 132.755],
-  zoom: 11,
-  layers: [gsiPale]
-});
-
-L.control.layers({
-  '🗺 国土地理院(淡色)': gsiPale,
-  '🗺 国土地理院(標準)': gsiStd,
-  '🛰 Google衛星': googleSat
-}, null, { position: 'bottomleft' }).addTo(map);
-
-// ─── State ───
-let ndviLayer = null;
-
-// ─── UI Events ───
-function setLocation(lat, lon, name) {
-  const delta = 0.05;
-  document.getElementById('bbox-w').value = (lon - delta).toFixed(2);
-  document.getElementById('bbox-s').value = (lat - delta).toFixed(2);
-  document.getElementById('bbox-e').value = (lon + delta).toFixed(2);
-  document.getElementById('bbox-n').value = (lat + delta).toFixed(2);
-  map.setView([lat, lon], 11);
-  document.getElementById('status').textContent = `${name} を選択しました。「表示」をクリックしてください。`;
+function updateStatus(msg) {
+  document.getElementById('status').textContent = msg;
+  console.log(msg);
 }
 
-// ─── Main Rendering Function ───
-function renderNDVI() {
-  const w = parseFloat(document.getElementById('bbox-w').value);
-  const s = parseFloat(document.getElementById('bbox-s').value);
-  const e = parseFloat(document.getElementById('bbox-e').value);
-  const n = parseFloat(document.getElementById('bbox-n').value);
+function testOSM() {
+  updateStatus('OSM Loading...');
+  if (currentLayer) map.removeLayer(currentLayer);
+  currentLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: 'OSM',
+    maxZoom: 19
+  }).addTo(map);
+  updateStatus('✓ OSM Added');
+}
 
-  document.getElementById('status').textContent = 'NDVI レイヤーを追加中...';
-
-  try {
-    // NASA GIBS MODIS NDVI XYZ タイルレイヤー（正式版）
-    const ndviTileUrl = 'https://gibs.earthdata.nasa.gov/wmts-webmerc/MODIS_Terra_NDVI_8Day/default//GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg';
-
-    // 既存レイヤーを削除
-    if (ndviLayer) {
-      map.removeLayer(ndviLayer);
+function testNDVI() {
+  updateStatus('NASA NDVI Loading...');
+  if (currentLayer) map.removeLayer(currentLayer);
+  currentLayer = L.tileLayer(
+    'https://gibs.earthdata.nasa.gov/wmts-webmerc/MODIS_Terra_NDVI_8Day/default//GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg',
+    {
+      attribution: 'NASA GIBS',
+      maxZoom: 8,
+      minZoom: 0
     }
-
-    // NDVI タイルレイヤーを追加
-    ndviLayer = L.tileLayer(ndviTileUrl, {
-      maxZoom: 18,
-      opacity: 0.8,
-      attribution: 'NASA GIBS MODIS NDVI'
-    }).addTo(map);
-
-    // 指定範囲に zoom
-    map.fitBounds([[s, w], [n, e]]);
-    document.getElementById('map-legend').classList.add('show');
-    document.getElementById('status').innerHTML = '<span style="color:var(--green)">✓ NDVI レイヤーを表示中</span>';
-
-  } catch (err) {
-    console.error('[NDVI] エラー:', err);
-    document.getElementById('status').innerHTML = `<span style="color:#dc2626">❌ エラー: ${err.message}</span>`;
-  }
+  ).addTo(map);
+  updateStatus('✓ NASA NDVI Added (zoom 0-8)');
 }
+
+function testSentinel() {
+  updateStatus('Sentinel Loading...');
+  if (currentLayer) map.removeLayer(currentLayer);
+  // Sentinel Hub WMS（簡易版）
+  currentLayer = L.tileLayer.wms(
+    'https://services.sentinel-hub.com/ogc/wms/a9e2e739-e29f-43f9-8e3e-d1b859ac0f8b',
+    {
+      layers: 'TRUE_COLOR',
+      attribution: 'Sentinel Hub',
+      maxZoom: 18,
+      transparent: true,
+      time: '2026-04-29'
+    }
+  ).addTo(map);
+  updateStatus('✓ Sentinel Added');
+}
+
+// デフォルトで OSM を表示
+testOSM();
 </script>
+</body>
 </html>
