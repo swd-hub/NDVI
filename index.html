@@ -164,19 +164,43 @@ document.getElementById('opacity-slider').oninput = function() {
 async function getAccessToken() {
   const id = document.getElementById('client-id').value;
   const sec = document.getElementById('client-secret').value;
+  
+  console.log('[Auth] Client ID:', id);
+  console.log('[Auth] Client Secret:', sec ? '***' : 'EMPTY');
+  
+  if(!id || !sec) {
+    document.getElementById('status').innerHTML = "<span style='color:red'>❌ Client ID または Secret が空です</span>";
+    return;
+  }
+  
   try {
+    console.log('[Auth] 認証API呼び出し開始...');
     const res = await fetch("https://identity.dataspace.copernicus.eu/auth/realms/IDP/protocol/openid-connect/token", {
-      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
-      body: new URLSearchParams({grant_type:"client_credentials", client_id:id, client_secret:sec})
+      method:"POST", 
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body: new URLSearchParams({
+        grant_type:"client_credentials", 
+        client_id:id, 
+        client_secret:sec
+      })
     });
+    
+    console.log('[Auth] レスポンスステータス:', res.status);
     const data = await res.json();
+    console.log('[Auth] レスポンス:', data);
+    
     if(data.access_token) {
       accessToken = data.access_token;
       document.getElementById('api-status').textContent = "API: CONNECTED";
       document.getElementById('btn-run').disabled = false;
       document.getElementById('status').innerHTML = "<span style='color:var(--green)'>✓ 接続成功</span>";
+    } else {
+      document.getElementById('status').innerHTML = "<span style='color:red'>❌ エラー: " + (data.error_description || data.error || 'Unknown error') + "</span>";
     }
-  } catch(e) { document.getElementById('status').textContent = "認証失敗"; }
+  } catch(e) { 
+    console.error('[Auth] 例外:', e);
+    document.getElementById('status').innerHTML = "<span style='color:red'>❌ 認証失敗: " + e.message + "</span>"; 
+  }
 }
 
 // --- Analysis Fetch ---
