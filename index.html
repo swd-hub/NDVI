@@ -3,261 +3,424 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NDVI Analyzer — Sentinel Hub 10m [Full Integrated]</title>
+<title>Sentinel-2 NDVI Analyzer — WMS API版</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap');
+
 :root {
-  --bg:#ffffff; --panel:#f8fafc; --border:#cbd5e1;
-  --accent:#059669; --green:#16a34a; --text:#0f172a; --muted:#64748b;
-  --mono:'Space Mono',monospace; --sans:'Noto Sans JP',sans-serif;
+  --bg:#ffffff;
+  --panel:#f8fafc;
+  --border:#cbd5e1;
+  --accent:#059669;
+  --green:#16a34a;
+  --text:#0f172a;
+  --muted:#64748b;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
 
-header{display:flex;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);z-index:1000;height:50px;}
-header h1{font-family:var(--mono);font-size:0.9rem;font-weight:700;}
-header h1 em{color:var(--accent);font-style:normal;}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Noto Sans JP',sans-serif;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
 
-.app-body{display:flex;flex:1;overflow:hidden;}
-.side{width:340px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;position:relative;}
-.side-scroll{flex:1;overflow-y:auto;padding:14px;scrollbar-width:thin;}
+header {
+  display:flex;
+  align-items:center;
+  padding:10px 16px;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  z-index:1000;
+  height:50px;
+}
 
-.sh{font-family:var(--mono);font-size:0.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:16px 0 8px;display:flex;align-items:center;gap:8px;font-weight:700;}
-.sh::after{content:'';flex:1;height:1px;background:var(--border);}
+header h1 {
+  font-family:'Space Mono',monospace;
+  font-size:0.9rem;
+  font-weight:700;
+}
 
-/* 認証・設定 */
-.cfg{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin-bottom:10px;}
-.cfg label{display:block;font-size:0.58rem;color:#047857;font-weight:700;margin-bottom:3px;}
-.cfg input{width:100%;border:1px solid #bbf7d0;border-radius:4px;padding:6px;font-size:0.75rem;font-family:var(--mono);margin-bottom:6px;}
+header h1 em {
+  color:var(--accent);
+  font-style:normal;
+}
 
-.btn-auth{width:100%;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px;font-size:0.7rem;font-weight:700;cursor:pointer;}
-.btn-run{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px;font-size:0.85rem;font-weight:700;cursor:pointer;margin-top:10px;transition:0.2s;}
-.btn-run:disabled{background:#94a3b8;}
+.app-body {
+  display:flex;
+  flex:1;
+  overflow:hidden;
+}
 
-.ctrl label{display:block;font-size:0.6rem;color:var(--muted);font-weight:700;margin-bottom:2px;}
-.ctrl input, .ctrl select{width:100%;border:1px solid var(--border);border-radius:4px;padding:6px;font-size:0.8rem;font-family:var(--mono);background:#fff;}
+.side {
+  width:320px;
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
 
-.month-disp{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--accent);text-align:center;margin:8px 0;}
-input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
+.side-scroll {
+  flex:1;
+  overflow-y:auto;
+  padding:14px;
+}
 
-/* カラースケール & 不透明度 (GEE版デザイン) */
-.ndvi-colorbar{height:10px;border-radius:3px;background:linear-gradient(to right,#8B4513,#D2B48C,#F5F5DC,#90EE90,#32CD32,#006400);margin:8px 0 4px;border:1px solid rgba(0,0,0,0.1);}
-.ndvi-labels{display:flex;justify-content:space-between;font-size:0.57rem;color:var(--muted);font-family:var(--mono);}
-.opacity-row{display:flex;align-items:center;gap:10px;margin-top:5px;}
-.opacity-val{font-family:var(--mono);font-size:0.75rem;color:var(--accent);min-width:35px;text-align:right;}
+.sh {
+  font-family:'Space Mono',monospace;
+  font-size:0.6rem;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin:14px 0 8px;
+  font-weight:700;
+  border-bottom:1px solid var(--border);
+  padding-bottom:6px;
+}
 
-#map{flex:1;}
-.status{font-size:0.68rem;margin-top:10px;padding:8px;border-radius:4px;background:#fff;border:1px solid var(--border);font-family:var(--mono);line-height:1.4;}
+.preset-grid {
+  display:grid;
+  grid-template-columns:1fr;
+  gap:6px;
+  margin-bottom:12px;
+}
 
-/* 凡例 (左下に配置) */
-.map-legend{position:absolute;bottom:42px;right:12px;z-index:900;background:rgba(255,255,255,0.9);border:1px solid var(--border);border-radius:8px;padding:10px;min-width:200px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
+.pbtn {
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:8px;
+  font-size:0.75rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+
+.pbtn:hover {
+  background:var(--panel);
+  border-color:var(--accent);
+}
+
+.pbtn.on {
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
+}
+
+.ctrl {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom:10px;
+}
+
+.ctrl-item {
+  display:flex;
+  flex-direction:column;
+}
+
+.ctrl-item label {
+  font-size:0.65rem;
+  color:var(--muted);
+  font-weight:700;
+  margin-bottom:3px;
+}
+
+.ctrl-item input {
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:6px;
+  font-size:0.8rem;
+  font-family:'Space Mono',monospace;
+}
+
+.btn-render {
+  width:100%;
+  background:var(--accent);
+  color:#fff;
+  border:none;
+  border-radius:8px;
+  padding:12px;
+  font-size:0.85rem;
+  font-weight:700;
+  cursor:pointer;
+  margin-top:10px;
+  transition:0.2s;
+}
+
+.btn-render:hover {
+  background:var(--green);
+}
+
+.btn-render:disabled {
+  background:#94a3b8;
+  cursor:not-allowed;
+}
+
+.status {
+  font-size:0.68rem;
+  margin-top:10px;
+  padding:8px;
+  border-radius:4px;
+  background:#fff;
+  border:1px solid var(--border);
+  font-family:'Space Mono',monospace;
+  line-height:1.4;
+  color:var(--text);
+}
+
+.ndvi-colorbar {
+  height:12px;
+  border-radius:3px;
+  background:linear-gradient(to right, #8B4513, #D2B48C, #F5F5DC, #90EE90, #32CD32, #006400);
+  margin:8px 0 4px;
+  border:1px solid rgba(0,0,0,0.1);
+}
+
+.ndvi-labels {
+  display:flex;
+  justify-content:space-between;
+  font-size:0.57rem;
+  color:var(--muted);
+  font-family:'Space Mono',monospace;
+}
+
+#map { flex:1; }
+
+.map-legend {
+  position:absolute;
+  bottom:42px;
+  right:12px;
+  z-index:900;
+  background:rgba(255,255,255,0.95);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:10px;
+  min-width:200px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.1);
+  display:none;
+}
+
+.map-legend.show {
+  display:block;
+}
 </style>
 </head>
 <body>
 
 <header>
   <span>🛰️</span>
-  <h1 style="margin-left:8px;">NDVI Analyzer <em>[Sentinel Hub 10m Integrated]</em></h1>
-  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);" id="api-status">API: DISCONNECTED</div>
+  <h1 style="margin-left:8px;">NDVI Analyzer <em>[Sentinel-2 WMS 10m]</em></h1>
+  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);">WMS API</div>
 </header>
 
 <div class="app-body">
   <div class="side">
     <div class="side-scroll">
-      <div class="sh">CDSE AUTHENTICATION</div>
-      <div class="cfg">
-        <label>CLIENT ID</label>
-        <input type="text" id="client-id" placeholder="Your Client ID" value="sh-a570c45b-a3ce-4889-98cc-b3427a00911c">
-        <label>CLIENT SECRET</label>
-        <input type="password" id="client-secret" placeholder="入力してください">
-        <button class="btn-auth" onclick="getAccessToken()">🔑 CONNECT TO CDSE</button>
-        <small style="display:block; margin-top:6px; color:var(--muted); font-size:0.65rem;">
-          💡 ページロード時に自動認証します（デフォルト情報使用）
-        </small>
+      <div class="sh">データソース</div>
+      <div class="preset-grid">
+        <button class="pbtn on" onclick="selectSource('sentinel2')">🛰 Sentinel-2 10m</button>
       </div>
 
-      <div class="sh">OBSERVATION DATE</div>
-      <div class="month-disp" id="date-val">2026-04-26</div>
-      <input type="range" id="date-slider" min="0" max="365" value="365">
-
-      <div class="sh">NDVI COLOR SCALE</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div class="ctrl"><label>MIN</label><input type="number" id="ndvi-min" value="-0.2" step="0.05"></div>
-        <div class="ctrl"><label>MAX</label><input type="number" id="ndvi-max" value="0.9" step="0.05"></div>
+      <div class="sh">観測日</div>
+      <div style="font-family:'Space Mono',monospace; font-size:1.2rem; font-weight:700; color:var(--accent); text-align:center; margin:8px 0;">
+        <input type="date" id="obs-date" style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px; font-size:0.9rem;">
       </div>
+
+      <div class="sh">解析範囲</div>
+      <div class="ctrl">
+        <div class="ctrl-item"><label>西（W）</label><input type="number" id="bbox-w" value="132.70" step="0.01"></div>
+        <div class="ctrl-item"><label>南（S）</label><input type="number" id="bbox-s" value="35.35" step="0.01"></div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-item"><label>東（E）</label><input type="number" id="bbox-e" value="132.80" step="0.01"></div>
+        <div class="ctrl-item"><label>北（N）</label><input type="number" id="bbox-n" value="35.40" step="0.01"></div>
+      </div>
+
+      <div class="sh">NDVI カラースケール</div>
       <div class="ndvi-colorbar"></div>
       <div class="ndvi-labels">
-        <span id="label-min">-0.2</span><span>0.0</span><span>0.5</span><span id="label-max">0.9</span>
+        <span>-0.2</span>
+        <span>0.0</span>
+        <span>0.5</span>
+        <span>0.9</span>
       </div>
 
-      <div class="sh">OPACITY (不透明度)</div>
-      <div class="opacity-row">
-        <input type="range" id="opacity-slider" min="0" max="100" value="85">
-        <span class="opacity-val" id="opacity-val">85%</span>
-      </div>
-
-      <div class="sh">ANALYSIS BBOX</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-        <div class="ctrl"><label>W</label><input type="number" id="bw" value="132.70" step="0.01"></div>
-        <div class="ctrl"><label>S</label><input type="number" id="bs" value="35.35" step="0.01"></div>
-        <div class="ctrl"><label>E</label><input type="number" id="be" value="132.80" step="0.01"></div>
-        <div class="ctrl"><label>N</label><input type="number" id="bn" value="35.40" step="0.01"></div>
-      </div>
-
-      <button class="btn-run" id="btn-run" onclick="runAnalysis()" disabled>🚀 EXECUTE 10m ANALYSIS</button>
-      <div id="status" class="status">認証後に解析を実行できます</div>
+      <button class="btn-render" onclick="renderNDVI()">🚀 10m NDVI を描画</button>
+      <div class="status" id="status">準備完了。日付を指定して「描画」をクリックしてください。</div>
     </div>
   </div>
 
   <div id="map"></div>
-  
-  <div class="map-legend" id="map-legend" style="display:none;">
-    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI SCALE (Sentinel-2 10m)</div>
+
+  <div class="map-legend" id="map-legend">
+    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI スケール</div>
     <div class="ndvi-colorbar"></div>
-    <div class="ndvi-labels"><span id="leg-min">-0.2</span><span>0.4</span><span id="leg-max">0.9</span></div>
+    <div class="ndvi-labels"><span>-0.2</span><span>0.4</span><span>0.9</span></div>
   </div>
-</div>
+</body>
 
 <script>
-// --- Base Maps (Inherited from GEE version) ---
-const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', { attribution: '地理院標準' });
-const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { attribution: '地理院淡色' });
-const gsiRelief = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png', { attribution: '地理院標高' });
-const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { attribution: 'Google' });
-const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '地理院航空' });
+// ─── Map Setup ───
+const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+  attribution: '地理院標準'
+});
+const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+  attribution: '地理院淡色'
+});
+const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+  attribution: 'Google'
+});
 
-const map = L.map('map', { center: [35.367, 132.755], zoom: 13, layers: [gsiPale] });
+const map = L.map('map', {
+  center: [35.367, 132.755],
+  zoom: 13,
+  layers: [gsiPale]
+});
+
 L.control.layers({
-  '🗺 国土地理院(淡色)': gsiPale, '🗺 国土地理院(標準)': gsiStd, '🗺 地理院標高図': gsiRelief,
-  '🛰 Google衛星画像': googleSat, '🛰 地理院航空写真': gsiPhoto
+  '🗺 国土地理院(淡色)': gsiPale,
+  '🗺 国土地理院(標準)': gsiStd,
+  '🛰 Google衛星': googleSat
 }, null, { position: 'bottomleft' }).addTo(map);
 
-let accessToken = null, ndviLayer = null;
+// ─── State ───
+let ndviLayer = null;
+const today = new Date();
+document.getElementById('obs-date').valueAsDate = today;
 
-// --- GEE-style UI Logic ---
-document.getElementById('date-slider').oninput = function() {
-  const d = new Date(); d.setDate(d.getDate() - (365 - this.value));
-  document.getElementById('date-val').textContent = d.toISOString().split('T')[0];
-};
+// ─── UI Events ───
+function selectSource(src) {
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+  event.target.classList.add('on');
+}
 
-['ndvi-min', 'ndvi-max'].forEach(id => {
-  document.getElementById(id).oninput = function() {
-    const min = document.getElementById('ndvi-min').value;
-    const max = document.getElementById('ndvi-max').value;
-    document.getElementById('label-min').textContent = document.getElementById('leg-min').textContent = min;
-    document.getElementById('label-max').textContent = document.getElementById('leg-max').textContent = max;
-  };
-});
+// ─── Main Rendering Function ───
+async function renderNDVI() {
+  const date = document.getElementById('obs-date').value;
+  const w = parseFloat(document.getElementById('bbox-w').value);
+  const s = parseFloat(document.getElementById('bbox-s').value);
+  const e = parseFloat(document.getElementById('bbox-e').value);
+  const n = parseFloat(document.getElementById('bbox-n').value);
 
-document.getElementById('opacity-slider').oninput = function() {
-  document.getElementById('opacity-val').textContent = this.value + '%';
-  if(ndviLayer) ndviLayer.setOpacity(this.value / 100);
-};
-
-// --- API Auth ---
-async function getAccessToken() {
-  const id = document.getElementById('client-id').value;
-  const sec = document.getElementById('client-secret').value;
-  
-  console.log('[Auth] Client ID:', id);
-  console.log('[Auth] Client Secret:', sec ? '***' : 'EMPTY');
-  
-  if(!id || !sec) {
-    document.getElementById('status').innerHTML = "<span style='color:red'>❌ Client ID または Secret が空です</span>";
+  if (!date) {
+    document.getElementById('status').textContent = '日付を指定してください。';
     return;
   }
-  
+
+  document.getElementById('status').textContent = '10m NDVI データを取得中...';
+
   try {
-    console.log('[Auth] 認証API呼び出し開始...');
-    const res = await fetch("https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token", {
-      method:"POST", 
-      headers:{"Content-Type":"application/x-www-form-urlencoded"},
-      body: new URLSearchParams({
-        grant_type:"client_credentials", 
-        client_id:id, 
-        client_secret:sec
-      })
-    });
+    // Sentinel Hub WMS パラメータ
+    // 公開インスタンスを使用（Instance ID: a9e2e739-e29f-43f9-8e3e-d1b859ac0f8b）
+    const instanceId = 'a9e2e739-e29f-43f9-8e3e-d1b859ac0f8b';
     
-    console.log('[Auth] レスポンスステータス:', res.status);
-    const data = await res.json();
-    console.log('[Auth] レスポンス:', data);
+    // WMS GetMap リクエスト
+    const wmsUrl = `https://services.sentinel-hub.com/ogc/wms/${instanceId}`;
     
-    if(data.access_token) {
-      accessToken = data.access_token;
-      document.getElementById('api-status').textContent = "API: CONNECTED";
-      document.getElementById('btn-run').disabled = false;
-      document.getElementById('status').innerHTML = "<span style='color:var(--green)'>✓ 接続成功</span>";
-    } else {
-      document.getElementById('status').innerHTML = "<span style='color:red'>❌ エラー: " + (data.error_description || data.error || 'Unknown error') + "</span>";
-    }
-  } catch(e) { 
-    console.error('[Auth] 例外:', e);
-    document.getElementById('status').innerHTML = "<span style='color:red'>❌ 認証失敗: " + e.message + "</span>"; 
-  }
+    // Evalscript でNDVIを計算（Base64エンコード済み）
+    // (B8 - B4) / (B8 + B4) でNDVIを計算し、カラーマップで可視化
+    const evalscript = `
+//VERSION=3
+function setup() {
+  return {
+    input: ["B04", "B08", "dataMask"],
+    output: { bands: 3 }
+  };
 }
 
-// --- Analysis Fetch ---
-async function runAnalysis() {
-  const date = document.getElementById('date-val').textContent;
-  const nMin = +document.getElementById('ndvi-min').value;
-  const nMax = +document.getElementById('ndvi-max').value;
-  const w = +document.getElementById('bw').value, s = +document.getElementById('bs').value;
-  const e = +document.getElementById('be').value, n = +document.getElementById('bn').value;
-
-  // 動的なEvalscript (GEE版のようにスケールを反映)
-  const script = `
-    function setup(){ return {input:["B04","B08"], output:{bands:3}}; }
-    function evaluatePixel(s){
-      let v = (s.B08 - s.B04) / (s.B08 + s.B04);
-      let min = ${nMin}, max = ${nMax};
-      if (v < min) return [0.5, 0.3, 0.1]; // 褐色
-      if (v > max) return [0.0, 0.4, 0.0]; // 深緑
-      let f = (v - min) / (max - min);
-      return [0.9 - f*0.9, 0.9, 0.8 - f*0.8]; // 簡易カラースケール
-    }`;
-
-  document.getElementById('status').textContent = "10mデータを取得中...";
-  try {
-    const res = await fetch("https://sh.dataspace.copernicus.eu/api/v1/process", {
-      method:"POST",
-      headers:{"Authorization":`Bearer ${accessToken}`,"Content-Type":"application/json","Accept":"image/png"},
-      body: JSON.stringify({
-        input: { bounds: { bbox:[w,s,e,n], properties:{crs:"http://www.opengis.net/def/crs/OGC/1.3/CRS84"} },
-                 data: [{ type: "S2L2A", dataFilter:{timeRange:{from:date+"T00:00:00Z",to:date+"T23:59:59Z"}} }] },
-        output: { width:800, height:800 }, evalscript: script
-      })
-    });
-    if(!res.ok) throw new Error("データなし（雲の可能性）");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    if(ndviLayer) map.removeLayer(ndviLayer);
-    ndviLayer = L.imageOverlay(url, [[s,w],[n,e]], {opacity: document.getElementById('opacity-slider').value / 100}).addTo(map);
-    map.fitBounds([[s,w],[n,e]]);
-    document.getElementById('map-legend').style.display = 'block';
-    document.getElementById('status').innerHTML = "<span style='color:var(--green)'>✓ 解析完了</span>";
-  } catch(err) { document.getElementById('status').innerHTML = "<span style='color:var(--red)'>エラー: "+err.message+"</span>"; }
-}
-
-// --- ページロード時に自動認証 ---
-window.addEventListener('load', function() {
-  const id = document.getElementById('client-id').value;
-  const sec = document.getElementById('client-secret').value;
+function evaluatePixel(sample) {
+  let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
   
-  // ダミー値でない場合は自動認証を試みる
-  if(id && id !== 'YOUR_CLIENT_ID_HERE' && sec && sec !== 'YOUR_CLIENT_SECRET_HERE') {
-    console.log('[Auto-Auth] デフォルト認証情報で接続を試みます...');
-    getAccessToken();
+  // NDVI を -0.2～0.9 の範囲で 0～1 に正規化
+  let normalized = (ndvi + 0.2) / 1.1;
+  normalized = Math.max(0, Math.min(1, normalized));
+  
+  // カラーマップ：茶色→黄色→緑→濃緑
+  let r, g, b;
+  if (normalized < 0.2) {
+    // 茶色
+    r = 0.545; g = 0.271; b = 0.075;
+  } else if (normalized < 0.4) {
+    // 茶色→黄色
+    let t = (normalized - 0.2) / 0.2;
+    r = 0.545 + (0.827 - 0.545) * t;
+    g = 0.271 + (0.718 - 0.271) * t;
+    b = 0.075 + (0.384 - 0.075) * t;
+  } else if (normalized < 0.6) {
+    // 黄色→浅緑
+    let t = (normalized - 0.4) / 0.2;
+    r = 0.827 - 0.127 * t;
+    g = 0.718 + 0.082 * t;
+    b = 0.384 - 0.184 * t;
+  } else if (normalized < 0.8) {
+    // 浅緑→緑
+    let t = (normalized - 0.6) / 0.2;
+    r = 0.7 - 0.537 * t;
+    g = 0.8;
+    b = 0.2;
   } else {
-    console.log('[Auto-Auth] デフォルト認証情報がセットされていません。手動で入力してください。');
+    // 濃緑
+    r = 0.0; g = 0.4; b = 0.0;
   }
-});
+  
+  return [r, g, b];
+}
+`;
+
+    const evalscriptBase64 = btoa(evalscript);
+
+    // WMS URL パラメータ
+    const params = new URLSearchParams({
+      'SERVICE': 'WMS',
+      'REQUEST': 'GetMap',
+      'LAYERS': 'TRUE_COLOR,NDVI',
+      'BBOX': `${w},${s},${e},${n}`,
+      'WIDTH': '800',
+      'HEIGHT': '800',
+      'CRS': 'EPSG:4326',
+      'FORMAT': 'image/png',
+      'TRANSPARENT': 'true',
+      'TIME': `${date}T00:00:00Z/${date}T23:59:59Z`,
+      'EVALSCRIPT': evalscriptBase64,
+      'SHOWLOGO': 'false'
+    });
+
+    const fullUrl = `${wmsUrl}?${params.toString()}`;
+    
+    console.log('[NDVI] WMS リクエスト:', fullUrl.substring(0, 100) + '...');
+
+    // 画像取得
+    const response = await fetch(fullUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const imageUrl = URL.createObjectURL(blob);
+
+    // 既存レイヤーを削除
+    if (ndviLayer) map.removeLayer(ndviLayer);
+
+    // 新しいレイヤーを追加
+    ndviLayer = L.imageOverlay(imageUrl, [[s, w], [n, e]], {
+      opacity: 0.85
+    }).addTo(map);
+
+    map.fitBounds([[s, w], [n, e]]);
+    document.getElementById('map-legend').classList.add('show');
+    document.getElementById('status').innerHTML = '<span style="color:var(--green)">✓ 描画完了</span>';
+
+  } catch (err) {
+    console.error('[NDVI] エラー:', err);
+    document.getElementById('status').innerHTML = `<span style="color:#dc2626">❌ エラー: ${err.message}</span>`;
+  }
+}
 </script>
-</body>
 </html>
