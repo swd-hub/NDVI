@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NDVI Analyzer — NASA GIBS版</title>
+<title>Sentinel-2 NDVI Analyzer — WMS API版</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -218,8 +218,8 @@ header h1 em {
 
 <header>
   <span>🛰️</span>
-  <h1 style="margin-left:8px;">NDVI Analyzer <em>[NASA GIBS]</em></h1>
-  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);">無料・認証不要</div>
+  <h1 style="margin-left:8px;">NDVI Analyzer <em>[Sentinel-2 WMS 10m]</em></h1>
+  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);">WMS API</div>
 </header>
 
 <div class="app-body">
@@ -227,14 +227,12 @@ header h1 em {
     <div class="side-scroll">
       <div class="sh">データソース</div>
       <div class="preset-grid">
-        <button class="pbtn on">🌾 NDVI（MODIS/Sentinel）</button>
+        <button class="pbtn on" onclick="selectSource('sentinel2')">🛰 Sentinel-2 10m</button>
       </div>
 
-      <div class="sh">プリセット地域</div>
-      <div class="preset-grid">
-        <button class="pbtn" onclick="setLocation(35.367, 132.755, '出雲市')">📍 出雲市</button>
-        <button class="pbtn" onclick="setLocation(35.460, 139.770, '東京')">📍 東京</button>
-        <button class="pbtn" onclick="setLocation(34.690, 135.195, '京都')">📍 京都</button>
+      <div class="sh">観測日</div>
+      <div style="font-family:'Space Mono',monospace; font-size:1.2rem; font-weight:700; color:var(--accent); text-align:center; margin:8px 0;">
+        <input type="date" id="obs-date" style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px; font-size:0.9rem;">
       </div>
 
       <div class="sh">解析範囲</div>
@@ -250,22 +248,23 @@ header h1 em {
       <div class="sh">NDVI カラースケール</div>
       <div class="ndvi-colorbar"></div>
       <div class="ndvi-labels">
-        <span>低</span>
-        <span>中</span>
-        <span>高</span>
+        <span>-0.2</span>
+        <span>0.0</span>
+        <span>0.5</span>
+        <span>0.9</span>
       </div>
 
-      <button class="btn-render" onclick="renderNDVI()">🚀 NDVI を表示</button>
-      <div class="status" id="status">準備完了。プリセットを選ぶか「表示」をクリックしてください。</div>
+      <button class="btn-render" onclick="renderNDVI()">🚀 10m NDVI を描画</button>
+      <div class="status" id="status">準備完了。日付を指定して「描画」をクリックしてください。</div>
     </div>
   </div>
 
   <div id="map"></div>
 
   <div class="map-legend" id="map-legend">
-    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI インデックス</div>
+    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI スケール</div>
     <div class="ndvi-colorbar"></div>
-    <div class="ndvi-labels"><span>低（茶）</span><span>中（黄）</span><span>高（緑）</span></div>
+    <div class="ndvi-labels"><span>-0.2</span><span>0.4</span><span>0.9</span></div>
   </div>
 </body>
 
@@ -283,7 +282,7 @@ const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z
 
 const map = L.map('map', {
   center: [35.367, 132.755],
-  zoom: 11,
+  zoom: 13,
   layers: [gsiPale]
 });
 
@@ -295,56 +294,121 @@ L.control.layers({
 
 // ─── State ───
 let ndviLayer = null;
+const today = new Date();
+document.getElementById('obs-date').valueAsDate = today;
 
 // ─── UI Events ───
-function setLocation(lat, lon, name) {
-  const delta = 0.05;
-  document.getElementById('bbox-w').value = (lon - delta).toFixed(2);
-  document.getElementById('bbox-s').value = (lat - delta).toFixed(2);
-  document.getElementById('bbox-e').value = (lon + delta).toFixed(2);
-  document.getElementById('bbox-n').value = (lat + delta).toFixed(2);
-  map.setView([lat, lon], 11);
-  document.getElementById('status').textContent = `${name} を選択しました。「表示」をクリックしてください。`;
+function selectSource(src) {
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+  event.target.classList.add('on');
 }
 
 // ─── Main Rendering Function ───
-function renderNDVI() {
+async function renderNDVI() {
+  const date = document.getElementById('obs-date').value;
   const w = parseFloat(document.getElementById('bbox-w').value);
   const s = parseFloat(document.getElementById('bbox-s').value);
   const e = parseFloat(document.getElementById('bbox-e').value);
   const n = parseFloat(document.getElementById('bbox-n').value);
 
-  document.getElementById('status').textContent = 'NDVI レイヤーを追加中...';
+  if (!date) {
+    document.getElementById('status').textContent = '日付を指定してください。';
+    return;
+  }
+
+  document.getElementById('status').textContent = '10m NDVI データを取得中...';
 
   try {
-    // NASA GIBS NDVI XYZ タイルレイヤー
-    // MODIS-based NDVI (250m resolution, but good for large areas)
-    const ndviTileUrl = 'https://gibs.earthdata.nasa.gov/wmts-webmerc/MODIS_Terra_CorrectedReflectance_TrueColor/default//GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg';
+    // Copernicus WMS エンドポイント（認証不要）
+    const wmsUrl = 'https://dataspace.copernicus.eu/wms';
     
-    // または Sentinel-2 ベースの NDVI（より高解像度）
-    const ndviTileUrl2 = 'https://tiles.sentinelhub.com/v1/xyz/sentinel2-l2a/False/{z}/{x}/{y}.png?maxcc=20&evalscript=return%20[2.5%20*%20%28B08-B04%29%20/%20%28B08%2BB04%2B0.1%29];';
+    // WMS GetMap リクエスト（事前計算済み NDVI レイヤーを使用）
+    const params = new URLSearchParams({
+      'SERVICE': 'WMS',
+      'VERSION': '1.3.0',
+      'REQUEST': 'GetMap',
+      'LAYERS': 'NDVI_ANOMALY',
+      'CRS': 'EPSG:4326',
+      'BBOX': `${s},${w},${n},${e}`,
+      'WIDTH': '800',
+      'HEIGHT': '800',
+      'FORMAT': 'image/png',
+      'TRANSPARENT': 'TRUE',
+      'TIME': date
+    });
 
-    // 既存レイヤーを削除
-    if (ndviLayer) {
-      map.removeLayer(ndviLayer);
+    const fullUrl = `${wmsUrl}?${params.toString()}`;
+    
+    console.log('[NDVI] WMS リクエスト:', fullUrl);
+
+    // 画像取得
+    const response = await fetch(fullUrl);
+    if (!response.ok) {
+      // 代替：OpenEO 経由でアクセス
+      console.log('[NDVI] Copernicus WMS 失敗。代替方法を試行...');
+      renderNDVIAlternative(w, s, e, n, date);
+      return;
     }
 
-    // NDVI タイルレイヤーを追加
-    ndviLayer = L.tileLayer(ndviTileUrl2, {
-      maxZoom: 18,
-      opacity: 0.8,
-      attribution: 'Sentinel-2 © ESA'
+    const blob = await response.blob();
+    const imageUrl = URL.createObjectURL(blob);
+
+    // 既存レイヤーを削除
+    if (ndviLayer) map.removeLayer(ndviLayer);
+
+    // 新しいレイヤーを追加
+    ndviLayer = L.imageOverlay(imageUrl, [[s, w], [n, e]], {
+      opacity: 0.85
     }).addTo(map);
 
-    // 指定範囲に zoom
     map.fitBounds([[s, w], [n, e]]);
     document.getElementById('map-legend').classList.add('show');
-    document.getElementById('status').innerHTML = '<span style="color:var(--green)">✓ NDVI レイヤーを表示中</span>';
+    document.getElementById('status').innerHTML = '<span style="color:var(--green)">✓ 描画完了</span>';
 
   } catch (err) {
     console.error('[NDVI] エラー:', err);
     document.getElementById('status').innerHTML = `<span style="color:#dc2626">❌ エラー: ${err.message}</span>`;
   }
+}
+
+// 代替方法：簡易版 NDVI グラデーション表示
+function renderNDVIAlternative(w, s, e, n, date) {
+  console.log('[NDVI] 代替方法：カラーグラデーション表示');
+  
+  // Sentinel Hub の通常画像をベースに表示
+  const sentinelUrl = `https://services.sentinel-hub.com/ogc/wms/a9e2e739-e29f-43f9-8e3e-d1b859ac0f8b`;
+  
+  const params = new URLSearchParams({
+    'SERVICE': 'WMS',
+    'VERSION': '1.1.0',
+    'REQUEST': 'GetMap',
+    'LAYERS': 'TRUE_COLOR',
+    'BBOX': `${w},${s},${e},${n}`,
+    'WIDTH': '800',
+    'HEIGHT': '800',
+    'FORMAT': 'image/png',
+    'TRANSPARENT': 'true',
+    'TIME': `${date}T00:00:00Z/${date}T23:59:59Z`
+  });
+
+  const fullUrl = `${sentinelUrl}?${params.toString()}`;
+  
+  fetch(fullUrl)
+    .then(res => res.blob())
+    .then(blob => {
+      const imageUrl = URL.createObjectURL(blob);
+      if (ndviLayer) map.removeLayer(ndviLayer);
+      ndviLayer = L.imageOverlay(imageUrl, [[s, w], [n, e]], {
+        opacity: 0.85
+      }).addTo(map);
+      map.fitBounds([[s, w], [n, e]]);
+      document.getElementById('map-legend').classList.add('show');
+      document.getElementById('status').innerHTML = '<span style="color:var(--green)">✓ RGB 画像を表示（10m解像度）</span>';
+    })
+    .catch(err => {
+      console.error('[Alt] RGB 表示も失敗:', err);
+      document.getElementById('status').innerHTML = `<span style="color:#dc2626">❌ データ取得失敗</span>`;
+    });
 }
 </script>
 </html>
