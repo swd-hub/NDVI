@@ -326,8 +326,7 @@ async function renderNDVI() {
     // WMS GetMap リクエスト
     const wmsUrl = `https://services.sentinel-hub.com/ogc/wms/${instanceId}`;
     
-    // Evalscript でNDVIを計算（Base64エンコード済み）
-    // (B8 - B4) / (B8 + B4) でNDVIを計算し、カラーマップで可視化
+    // Evalscript でNDVIを計算（日本語コメントなし）
     const evalscript = `
 //VERSION=3
 function setup() {
@@ -339,36 +338,28 @@ function setup() {
 
 function evaluatePixel(sample) {
   let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
-  
-  // NDVI を -0.2～0.9 の範囲で 0～1 に正規化
   let normalized = (ndvi + 0.2) / 1.1;
   normalized = Math.max(0, Math.min(1, normalized));
   
-  // カラーマップ：茶色→黄色→緑→濃緑
   let r, g, b;
   if (normalized < 0.2) {
-    // 茶色
     r = 0.545; g = 0.271; b = 0.075;
   } else if (normalized < 0.4) {
-    // 茶色→黄色
     let t = (normalized - 0.2) / 0.2;
     r = 0.545 + (0.827 - 0.545) * t;
     g = 0.271 + (0.718 - 0.271) * t;
     b = 0.075 + (0.384 - 0.075) * t;
   } else if (normalized < 0.6) {
-    // 黄色→浅緑
     let t = (normalized - 0.4) / 0.2;
     r = 0.827 - 0.127 * t;
     g = 0.718 + 0.082 * t;
     b = 0.384 - 0.184 * t;
   } else if (normalized < 0.8) {
-    // 浅緑→緑
     let t = (normalized - 0.6) / 0.2;
     r = 0.7 - 0.537 * t;
     g = 0.8;
     b = 0.2;
   } else {
-    // 濃緑
     r = 0.0; g = 0.4; b = 0.0;
   }
   
