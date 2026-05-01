@@ -1,336 +1,295 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NDVI Analyzer GEE — Google Earth Engine 月次植生解析</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDVI Analyzer GEE — Standalone</title>
 
-<!-- Libraries -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet & Draw -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap');
-:root {
-  --bg:#ffffff; --panel:#f8fafc; --card:#ffffff; --border:#cbd5e1;
-  --accent:#059669; --blue:#3b82f6; --green:#16a34a; --red:#ef4444;
-  --text:#0f172a; --muted:#64748b;
-  --mono:'Space Mono',monospace; --sans:'Noto Sans JP',sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-weight:400;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
 
-header{display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;z-index:1000;}
-.sat{font-size:1.3rem;}
-header h1{font-family:var(--mono);font-size:0.9rem;letter-spacing:.02em;font-weight:700;}
-header h1 em{color:var(--accent);font-style:normal;}
-.hbadge{margin-left:auto;font-family:var(--mono);font-size:0.65rem;color:var(--muted);display:flex;align-items:center;gap:6px;}
-.live-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;transition:all .4s;}
-.live-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
-
-.app-body{display:flex;flex:1;overflow:hidden;}
-.side{width:340px;min-width:280px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;position:relative;}
-.side-scroll{flex:1;overflow-y:auto;padding:14px 14px 20px;scrollbar-width:thin;}
-.resizer{width:6px;cursor:col-resize;background:transparent;position:absolute;top:0;right:-3px;height:100%;z-index:1001;}
-.resizer:hover{background:rgba(5,150,105,0.2);}
-
-.sh{font-family:var(--mono);font-size:0.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:16px 0 8px;display:flex;align-items:center;gap:8px;font-weight:700;}
-.sh::after{content:'';flex:1;height:1px;background:var(--border);}
-
-.cfg{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:11px 12px;margin-bottom:10px;}
-.cfg label{display:block;font-family:var(--mono);font-size:0.58rem;font-weight:700;color:#047857;text-transform:uppercase;margin-bottom:3px;margin-top:8px;}
-.cfg input{width:100%;background:#fff;border:1px solid #bbf7d0;border-radius:5px;color:var(--text);padding:6px 9px;font-size:0.75rem;font-family:var(--mono);outline:none;}
-.cfg-note{font-size:0.59rem;color:#047857;line-height:1.5;padding:7px 9px;background:rgba(255,255,255,0.6);border-radius:4px;border-left:2px solid var(--accent);margin-top:8px;}
-
-.ctrl{margin-bottom:8px;}
-.ctrl label{display:block;font-family:var(--mono);font-weight:700;font-size:0.58rem;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
-.ctrl input[type=number]{width:100%;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 9px;font-size:0.78rem;font-family:var(--mono);outline:none;}
-
-input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
-.month-disp{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--accent);text-align:center;margin-bottom:5px;}
-
-.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:4px;}
-.pbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.68rem;padding:7px 6px;cursor:pointer;transition:all .15s;}
-.pbtn:hover{background:#f0fdf4;border-color:var(--accent);}
-.pbtn.on{border-color:var(--accent);background:rgba(5,150,105,0.07);font-weight:600;}
-
-.btn-auth{width:100%;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:9px;font-size:0.75rem;font-weight:700;cursor:pointer;margin-top:8px;}
-.btn-run{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-size:0.8rem;font-weight:700;cursor:pointer;margin-top:7px;}
-.btn-run:disabled{background:#94a3b8;cursor:not-allowed;}
-
-.status{border-radius:6px;padding:9px 11px;font-size:0.68rem;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-family:var(--mono);}
-.status.loading{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.05);}
-.status.ok{border-color:var(--green);color:var(--green);background:rgba(22,163,74,0.05);}
-.spinner{width:10px;height:10px;border:2px solid transparent;border-top-color:currentColor;border-radius:50%;animation:spin .7s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
-
-.map-area{flex:1;display:flex;flex-direction:column;position:relative;}
-#map{flex:1;}
-.map-legend{position:absolute;bottom:42px;right:12px;z-index:900;background:rgba(255,255,255,0.9);border:1px solid var(--border);border-radius:8px;padding:10px 13px;min-width:210px;}
-.leg-bar{height:10px;border-radius:3px;margin-bottom:4px;background:linear-gradient(to right,#8B4513,#D2B48C,#F5F5DC,#90EE90,#32CD32,#006400);border:1px solid rgba(0,0,0,0.05);}
-.leg-labels{display:flex;justify-content:space-between;font-size:0.6rem;color:var(--muted);font-family:var(--mono);font-weight:700;}
-</style>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        #map { height: 100%; width: 100%; border-radius: 8px; }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+        input[type="range"] { accent-color: #059669; }
+    </style>
 </head>
-<body>
+<body class="bg-white text-slate-900 h-screen flex flex-col overflow-hidden">
 
-<header>
-  <span class="sat">🌿</span>
-  <h1>NDVI Analyzer <em>[Google Earth Engine]</em></h1>
-  <div class="hbadge">
-    <div class="live-dot" id="live-dot"></div>
-    <span id="header-source">未接続 — ログインしてください</span>
-  </div>
-</header>
+    <!-- Header -->
+    <header class="flex items-center gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 z-50 shrink-0">
+        <div class="bg-emerald-600 p-1.5 rounded-lg text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10a8 8 0 0 0-8 8"/><path d="M12 2v8"/><path d="M4 10a8 8 0 0 0 8-8"/><path d="M20 10a8 8 0 0 1-8-8"/><path d="m12 10 8 8"/><path d="M12 22v-8"/><path d="M20 22a8 8 0 0 0-8-8"/><path d="M4 22a8 8 0 0 1 8-8"/></svg>
+        </div>
+        <h1 class="font-mono text-sm font-bold">NDVI Analyzer <span class="text-emerald-600">[GEE]</span></h1>
+        <div id="auth-status" class="ml-auto flex items-center gap-2 text-[10px] font-mono text-slate-500">
+            <div id="live-dot" class="w-2 h-2 rounded-full bg-slate-300"></div>
+            <span id="header-text">未接続</span>
+        </div>
+    </header>
 
-<div class="app-body">
-  <div class="side" id="sidebar">
-    <div class="side-scroll">
-      <div class="sh">GEE 接続設定</div>
-      <div class="cfg">
-        <label>GCP Project ID</label>
-        <input type="text" id="inp-project" value="ai-test-2026">
-        <label>OAuth2 Client ID</label>
-        <input type="text" id="inp-client" value="409312431902-5qtfmognhv1rgt5esjnsu8l0p55gt201.apps.googleusercontent.com">
-        <button class="btn-auth" id="btn-auth" onclick="requestAuth()">🔑 Google ログイン</button>
-      </div>
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-80 border-r border-slate-200 bg-slate-50 overflow-y-auto p-4 flex flex-col gap-6 scrollbar-thin">
+            
+            <!-- Connection -->
+            <section>
+                <div class="flex items-center gap-2 mb-3 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                    <span>GEE 接続設定</span><div class="flex-1 h-px bg-slate-200"></div>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-3">
+                    <input id="inp-project" type="text" value="ai-test-2026" placeholder="Project ID" class="w-full bg-white border border-emerald-100 rounded-lg px-3 py-1.5 text-xs font-mono outline-none">
+                    <input id="inp-client" type="text" value="409312431902-5qtfmognhv1rgt5esjnsu8l0p55gt201.apps.googleusercontent.com" placeholder="Client ID" class="w-full bg-white border border-emerald-100 rounded-lg px-3 py-1.5 text-xs font-mono outline-none">
+                    <button onclick="requestAuth()" class="w-full bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-800 transition-all">Google ログイン</button>
+                </div>
+            </section>
 
-      <div class="sh">データソース</div>
-      <div class="preset-grid">
-        <button class="pbtn on" onclick="selectDataSource('modis',this)">📊 MODIS (1km)</button>
-        <button class="pbtn" onclick="selectDataSource('sentinel',this)">🛰 Sentinel-2 (10m)</button>
-      </div>
+            <!-- Data Source & Date -->
+            <section>
+                <div class="flex items-center gap-2 mb-3 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                    <span>データソース / 期間</span><div class="flex-1 h-px bg-slate-200"></div>
+                </div>
+                <div class="flex gap-2 mb-3">
+                    <button onclick="setSource('modis')" class="flex-1 p-2 rounded-lg border text-[10px] font-bold bg-emerald-100 border-emerald-400 text-emerald-800" id="btn-modis">MODIS (1km)</button>
+                    <button onclick="setSource('sentinel')" class="flex-1 p-2 rounded-lg border text-[10px] font-bold bg-white border-slate-200 text-slate-600" id="btn-sentinel">Sentinel-2 (10m)</button>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-xl p-3">
+                    <div id="month-disp" class="text-center font-mono text-xl font-bold text-emerald-600 mb-2">2024/01</div>
+                    <input id="month-slider" type="range" class="w-full mb-1">
+                    <div class="flex justify-between text-[9px] font-mono text-slate-400">
+                        <span id="date-min">2000/03</span><span id="date-max">NOW</span>
+                    </div>
+                </div>
+            </section>
 
-      <div class="sh">観測月</div>
-      <div class="month-disp" id="monthDisp">---- / --</div>
-      <input type="range" id="monthSlider" min="0" max="0" value="0">
-      <div class="preset-grid" style="grid-template-columns: 1fr 1fr; margin-top:5px;">
-        <select id="yearSelect" style="font-size:0.7rem;"></select>
-        <select id="monthSelect" style="font-size:0.7rem;"></select>
-      </div>
+            <!-- Region -->
+            <section>
+                <div class="flex items-center gap-2 mb-3 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                    <span>解析範囲</span><div class="flex-1 h-px bg-slate-200"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button onclick="applyPreset('izumo')" class="bg-white border border-slate-200 rounded-lg p-2 text-[10px] font-bold hover:bg-emerald-50">📍 Izumo</button>
+                    <button onclick="applyPreset('shimane')" class="bg-white border border-slate-200 rounded-lg p-2 text-[10px] font-bold hover:bg-emerald-50">📍 Shimane</button>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-[10px] font-mono bg-slate-100 p-2 rounded-lg">
+                    <input id="bboxW" type="number" step="0.01" class="rounded px-1">
+                    <input id="bboxE" type="number" step="0.01" class="rounded px-1">
+                    <input id="bboxS" type="number" step="0.01" class="rounded px-1">
+                    <input id="bboxN" type="number" step="0.01" class="rounded px-1">
+                </div>
+            </section>
 
-      <div class="sh">NDVI スケール</div>
-      <div class="preset-grid">
-        <div class="ctrl"><label>最小</label><input type="number" id="ndvi-min" value="-0.2" step="0.1"></div>
-        <div class="ctrl"><label>最大</label><input type="number" id="ndvi-max" value="0.9" step="0.1"></div>
-      </div>
+            <!-- NDVI Scale -->
+            <section>
+                <div class="flex items-center gap-2 mb-3 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                    <span>NDVI カラースケール</span><div class="flex-1 h-px bg-slate-200"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input id="ndvi-min" type="number" value="-0.2" step="0.05" class="text-xs p-1 border rounded">
+                    <input id="ndvi-max" type="number" value="0.9" step="0.05" class="text-xs p-1 border rounded">
+                </div>
+                <div class="h-2 w-full rounded-full bg-gradient-to-r from-[rgb(139,69,19)] via-[rgb(245,245,220)] to-[rgb(0,100,0)] mb-1"></div>
+            </section>
 
-      <div class="sh">不透明度</div>
-      <input type="range" id="opacitySlider" min="0" max="100" value="75">
+            <!-- Actions -->
+            <section class="mt-auto space-y-2">
+                <button onclick="renderNDVI()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> NDVI 描画
+                </button>
+                <div id="status" class="bg-slate-100 border border-slate-200 rounded-lg p-3 text-[11px] font-mono text-slate-500">ログインして開始</div>
+                <div class="flex gap-2">
+                    <button onclick="startDraw()" class="flex-1 py-2 border rounded-lg bg-white text-[10px] font-bold">📐 矩形選択</button>
+                    <button onclick="clearNDVI()" class="flex-1 py-2 border rounded-lg bg-white text-[10px] font-bold">🗑 クリア</button>
+                </div>
+            </section>
+        </aside>
 
-      <div class="sh">対象範囲</div>
-      <div class="preset-grid">
-        <button class="pbtn on" onclick="applyPreset('izumo',this)">Izumo</button>
-        <button class="pbtn" onclick="applyPreset('matsue',this)">Matsue</button>
-        <button class="pbtn" onclick="applyPreset('shimane',this)">Shimane</button>
-        <button class="pbtn" onclick="startDraw()">📐 矩形選択</button>
-      </div>
-
-      <button class="btn-run" id="btn-run" onclick="renderNDVI()" disabled>🌿 NDVI 描画実行</button>
-      <div class="status" id="status">ログイン後に開始してください</div>
-
-      <div class="sh">時系列 (24ヶ月)</div>
-      <button class="pbtn" style="width:100%" onclick="loadTimeSeries()">📈 時系列取得</button>
-      <div id="ts-status" style="font-size:0.6rem; color:var(--blue); margin-top:5px;"></div>
-      <canvas id="ts-chart" style="max-height:160px; margin-top:10px;"></canvas>
+        <!-- Map Area -->
+        <main class="flex-1 relative">
+            <div id="map"></div>
+            <div class="absolute bottom-4 left-4 z-[400] bg-white/80 backdrop-blur px-3 py-1.5 rounded-full border border-slate-200 text-[10px] font-mono text-slate-600 shadow-sm">
+                Powered by <span class="text-emerald-600 font-bold">Google Earth Engine</span>
+            </div>
+        </main>
     </div>
-    <div class="resizer" id="resizer"></div>
-  </div>
 
-  <div class="map-area">
-    <div id="map"></div>
-    <div class="map-legend" id="map-legend" style="display:none">
-      <div class="leg-bar"></div>
-      <div class="leg-labels"><span>-0.2</span><span>0.0</span><span>0.3</span><span>0.6</span><span>0.9</span></div>
-    </div>
-  </div>
-</div>
+    <script>
+        // --- Core Configuration ---
+        const GEE_BASE = 'https://earthengine.googleapis.com/v1';
+        let accessToken = null, tokenExpiry = 0, projectId = '', clientId = '';
+        let currentSource = 'modis';
+        
+        const PRESETS = {
+            izumo: { center: [35.367, 132.755], zoom: 11, bbox: [132.55, 35.24, 132.95, 35.52] },
+            shimane: { center: [35.1, 132.3], zoom: 9, bbox: [131.6, 34.2, 133.6, 35.8] }
+        };
 
-<script>
-const GEE_BASE = 'https://earthengine.googleapis.com/v1';
-const MODIS_COL = 'MODIS/061/MOD13A3';
-const SENTINEL_COL = 'COPERNICUS/S2_SR_HARMONIZED';
+        const DATES = (() => {
+            const r = []; const now = new Date();
+            let y = 2000, m = 3;
+            while (y < now.getUTCFullYear() || (y === now.getUTCFullYear() && m <= now.getUTCMonth())) {
+                const date = new Date(Date.UTC(y, m - 1, 1));
+                r.push({
+                    label: `${y}/${String(m).padStart(2, '0')}`,
+                    iso: `${y}-${String(m).padStart(2, '0')}-01`,
+                    nextIso: m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2, '0')}-01`
+                });
+                if (++m > 12) { m = 1; y++; }
+            }
+            return r;
+        })();
 
-// 日付リスト生成
-function buildDates() {
-  const r = []; const now = new Date();
-  let y = 2000, m = 3;
-  while (y < now.getUTCFullYear() || (y === now.getUTCFullYear() && m <= now.getUTCMonth())) {
-    const d = new Date(Date.UTC(y, m - 1, 1));
-    const nextM = m === 12 ? 1 : m + 1;
-    const nextY = m === 12 ? y + 1 : y;
-    r.push({
-      date: d,
-      label: `${y}/${String(m).padStart(2,'0')}`,
-      iso: `${y}-${String(m).padStart(2,'0')}-01`,
-      nextIso: `${nextY}-${String(nextM).padStart(2,'0')}-01`
-    });
-    if (++m > 12) { m = 1; y++; }
-  }
-  return r;
-}
-const DATES = buildDates();
+        // --- Leaflet Auth Layer ---
+        const AuthTileLayer = L.GridLayer.extend({
+            initialize(mapName, token, options) {
+                this.mapName = mapName; this.token = token;
+                L.GridLayer.prototype.initialize.call(this, options);
+            },
+            createTile(coords, done) {
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = 256;
+                const url = `${GEE_BASE}/${this.mapName}/tiles/${coords.z}/${coords.x}/${coords.y}`;
+                fetch(url, { headers: { Authorization: `Bearer ${this.token}` } })
+                    .then(r => r.ok ? r.blob() : Promise.reject())
+                    .then(blob => createImageBitmap(blob))
+                    .then(bmp => { canvas.getContext('2d').drawImage(bmp, 0, 0); done(null, canvas); })
+                    .catch(() => done(null, canvas));
+                return canvas;
+            }
+        });
 
-// Global State
-let GCP_PROJECT = '';
-let accessToken = null;
-let currentDataSource = 'modis';
-let map = null, ndviLayer = null, bboxRect = null, tsChart = null;
-let bbox = [132.55, 35.24, 132.95, 35.52];
+        // --- Map Initialization ---
+        const map = L.map('map', { center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, zoomControl: false });
+        L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { attribution: '地理院淡色' }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const drawControl = new L.Control.Draw({
+            draw: { rectangle: { shapeOptions: { color: '#059669', fillOpacity: 0 } }, polygon: false, circle: false, marker: false, polyline: false, circlemarker: false }
+        });
+        map.on(L.Draw.Event.CREATED, (e) => {
+            drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
+            const b = e.layer.getBounds();
+            updateBBoxFromBounds(b);
+        });
 
-// UI初期化
-const slider = document.getElementById('monthSlider');
-slider.max = DATES.length - 1; slider.value = DATES.length - 1;
-function updateMonthLabel() { document.getElementById('monthDisp').textContent = DATES[slider.value].label; }
-slider.oninput = updateMonthLabel;
-updateMonthLabel();
+        let ndviLayer = null, bboxRect = null;
 
-function selectDataSource(src, el) {
-  currentDataSource = src;
-  document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
-}
+        // --- Logic & Events ---
+        function requestAuth() {
+            projectId = document.getElementById('inp-project').value;
+            clientId = document.getElementById('inp-client').value;
+            const client = google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: 'https://www.googleapis.com/auth/earthengine.readonly',
+                callback: (resp) => {
+                    if (resp.error) return;
+                    accessToken = resp.access_token;
+                    document.getElementById('live-dot').className = 'w-2 h-2 rounded-full bg-emerald-500';
+                    document.getElementById('header-text').textContent = '接続済み: ' + projectId;
+                    setStatus('認証成功 ✓ 描画できます', 'ok');
+                }
+            });
+            client.requestAccessToken({ prompt: '' });
+        }
 
-function requestAuth() {
-  GCP_PROJECT = document.getElementById('inp-project').value;
-  const cid = document.getElementById('inp-client').value;
-  google.accounts.oauth2.initTokenClient({
-    client_id: cid, scope: 'https://www.googleapis.com/auth/earthengine.readonly',
-    callback: (resp) => {
-      if (resp.error) return;
-      accessToken = resp.access_token;
-      document.getElementById('live-dot').classList.add('on');
-      document.getElementById('header-source').textContent = `GEE接続中: ${GCP_PROJECT}`;
-      document.getElementById('btn-run').disabled = false;
-      setStatus('認証成功 ✓', 'ok');
-    }
-  }).requestAccessToken();
-}
+        async function geePost(endpoint, body) {
+            const url = `${GEE_BASE}/projects/${projectId}/${endpoint}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            return res.json();
+        }
 
-async function geePost(endpoint, body) {
-  const url = `${GEE_BASE}/projects/${GCP_PROJECT}/${endpoint}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
+        async function renderNDVI() {
+            if (!accessToken) return setStatus('ログインしてください', 'error');
+            const date = DATES[document.getElementById('month-slider').value];
+            const ndviMin = +document.getElementById('ndvi-min').value;
+            const ndviMax = +document.getElementById('ndvi-max').value;
+            setStatus('タイル作成中...', 'loading');
 
-// 可視化エンジンのビルド (filterDate 修正済み)
-function buildTileExpr(source, dStart, dEnd, min, max) {
-  const colId = source === 'sentinel' ? SENTINEL_COL : MODIS_COL;
-  const band = source === 'sentinel' ? 'B8' : 'NDVI'; // シンプルな例
-  return {
-    values: {
-      col: { functionInvocationValue: { functionName: 'ImageCollection.load', arguments: { id: { constantValue: colId } } } },
-      filtered: { functionInvocationValue: { functionName: 'Collection.filterDate', arguments: { collection: { valueReference: 'col' }, start: { constantValue: dStart }, end: { constantValue: dEnd } } } },
-      img: { functionInvocationValue: { functionName: 'Collection.first', arguments: { collection: { valueReference: 'filtered' } } } },
-      sel: { functionInvocationValue: { functionName: 'Image.select', arguments: { input: { valueReference: 'img' }, bandSelectors: { constantValue: [band] } } } },
-      '0': { functionInvocationValue: { functionName: 'Image.visualize', arguments: {
-          image: { valueReference: 'sel' }, min: { constantValue: min }, max: { constantValue: max },
-          palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
-      } } }
-    },
-    result: '0'
-  };
-}
+            const expr = {
+                values: {
+                    col: { functionInvocationValue: { functionName: 'ImageCollection.load', arguments: { id: { constantValue: currentSource === 'modis' ? 'MODIS/061/MOD13A3' : 'COPERNICUS/S2_SR_HARMONIZED' } } } },
+                    filtered: { functionInvocationValue: { functionName: 'ImageCollection.filterDate', arguments: { collection: { valueReference: 'col' }, start: { constantValue: date.iso }, end: { constantValue: date.nextIso } } } },
+                    img: { functionInvocationValue: { functionName: 'ImageCollection.first', arguments: { collection: { valueReference: 'filtered' } } } },
+                    viz: { functionInvocationValue: { functionName: 'Image.visualize', arguments: { 
+                        image: { functionInvocationValue: { functionName: 'Image.select', arguments: { input: { valueReference: 'img' }, bandSelectors: { constantValue: [currentSource === 'modis' ? 'NDVI' : 'B8'] } } } },
+                        min: { constantValue: Math.round(ndviMin / 0.0001) }, max: { constantValue: Math.round(ndviMax / 0.0001) },
+                        palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
+                    } } }
+                },
+                result: 'viz'
+            };
 
-// 実行
-async function renderNDVI() {
-  const d = DATES[slider.value];
-  const minRaw = Math.round(document.getElementById('ndvi-min').value / 0.0001);
-  const maxRaw = Math.round(document.getElementById('ndvi-max').value / 0.0001);
-  setStatus(`GEE マップ作成中...`, 'loading');
+            try {
+                const resp = await geePost('maps', { expression: expr, fileFormat: 'PNG' });
+                if (ndviLayer) map.removeLayer(ndviLayer);
+                ndviLayer = new AuthTileLayer(resp.name, accessToken, { opacity: 0.8 }).addTo(map);
+                setStatus(`描画完了: ${date.label}`, 'ok');
+            } catch (e) { setStatus('APIエラー', 'error'); }
+        }
 
-  try {
-    const expr = buildTileExpr(currentDataSource, d.iso, d.nextIso, minRaw, maxRaw);
-    const resp = await geePost('maps', { expression: expr, fileFormat: 'PNG' });
-    
-    if (ndviLayer) map.removeLayer(ndviLayer);
-    
-    const opacity = document.getElementById('opacitySlider').value / 100;
-    ndviLayer = L.gridLayer({ opacity, zIndex: 1000 });
-    ndviLayer.createTile = function(coords, done) {
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
-      const url = `${GEE_BASE}/${resp.name}/tiles/${coords.z}/${coords.x}/${coords.y}`;
-      fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-        .then(r => r.blob()).then(blob => createImageBitmap(blob))
-        .then(bmp => { canvas.getContext('2d').drawImage(bmp, 0, 0); done(null, canvas); })
-        .catch(() => done(null, canvas));
-      return canvas;
-    };
-    ndviLayer.addTo(map);
-    document.getElementById('map-legend').style.display = 'block';
-    setStatus(`描画完了: ${d.label}`, 'ok');
-  } catch (err) { setStatus('Error: ' + err.message); }
-}
+        const slider = document.getElementById('month-slider');
+        slider.max = DATES.length - 1; slider.value = DATES.length - 1;
+        slider.addEventListener('input', () => { document.getElementById('month-disp').textContent = DATES[slider.value].label; });
 
-// 時系列取得
-async function loadTimeSeries() {
-  const tsDates = DATES.slice(-24);
-  const labels = [], values = [];
-  const cLat = (bbox[1]+bbox[3])/2, cLon = (bbox[0]+bbox[2])/2;
-  const statusEl = document.getElementById('ts-status');
+        function setSource(s) {
+            currentSource = s;
+            document.getElementById('btn-modis').className = s === 'modis' ? 'flex-1 p-2 rounded-lg border text-[10px] font-bold bg-emerald-100 border-emerald-400 text-emerald-800' : 'flex-1 p-2 rounded-lg border text-[10px] font-bold bg-white border-slate-200 text-slate-600';
+            document.getElementById('btn-sentinel').className = s === 'sentinel' ? 'flex-1 p-2 rounded-lg border text-[10px] font-bold bg-emerald-100 border-emerald-400 text-emerald-800' : 'flex-1 p-2 rounded-lg border text-[10px] font-bold bg-white border-slate-200 text-slate-600';
+        }
 
-  for (let i=0; i<tsDates.length; i++) {
-    const d = tsDates[i];
-    statusEl.textContent = `取得中 ${i+1}/${tsDates.length}...`;
-    try {
-      const expr = {
-        values: {
-          col: { functionInvocationValue: { functionName: 'ImageCollection.load', arguments: { id: { constantValue: MODIS_COL } } } },
-          filtered: { functionInvocationValue: { functionName: 'Collection.filterDate', arguments: { collection: { valueReference: 'col' }, start: { constantValue: d.iso }, end: { constantValue: d.nextIso } } } },
-          img: { functionInvocationValue: { functionName: 'Collection.first', arguments: { collection: { valueReference: 'filtered' } } } },
-          pt: { functionInvocationValue: { functionName: 'GeometryConstructors.Point', arguments: { coordinates: { constantValue: [cLon, cLat] } } } },
-          reduced: { functionInvocationValue: { functionName: 'Image.reduceRegion', arguments: { image: { valueReference: 'img' }, reducer: { functionInvocationValue: { functionName: 'Reducer.mean', arguments:{} } }, geometry:{valueReference:'pt'}, scale:{constantValue:500} } } },
-          '0': { functionInvocationValue: { functionName: 'Dictionary.get', arguments: { object: { valueReference:'reduced' }, key:{constantValue:'NDVI'} } } }
-        }, result: '0'
-      };
-      const resp = await geePost('value:compute', { expression: expr });
-      labels.push(d.label);
-      values.push(resp.result > -28672 ? resp.result * 0.0001 : null);
-    } catch { labels.push(d.label); values.push(null); }
-  }
-  statusEl.textContent = '';
-  drawChart(labels, values);
-}
+        function applyPreset(k) {
+            const p = PRESETS[k]; map.setView(p.center, p.zoom);
+            document.getElementById('bboxW').value = p.bbox[0]; document.getElementById('bboxS').value = p.bbox[1];
+            document.getElementById('bboxE').value = p.bbox[2]; document.getElementById('bboxN').value = p.bbox[3];
+            updateRect(p.bbox);
+        }
 
-function drawChart(labels, data) {
-  if (tsChart) tsChart.destroy();
-  tsChart = new Chart(document.getElementById('ts-chart'), {
-    type: 'line',
-    data: { labels, datasets: [{ label: 'NDVI', data, borderColor: '#059669', tension: 0.3, fill: true, backgroundColor: 'rgba(5,150,105,0.1)' }] },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 1 } } }
-  });
-}
+        function updateRect(b) {
+            if (bboxRect) map.removeLayer(bboxRect);
+            bboxRect = L.rectangle([[b[1], b[0]], [b[3], b[2]]], { color: '#059669', fillOpacity: 0, weight: 1 }).addTo(map);
+        }
 
-// Map Setup
-map = L.map('map').setView([35.367, 132.755], 11);
-L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { attribution: '地理院淡色' }).addTo(map);
+        function updateBBoxFromBounds(b) {
+            document.getElementById('bboxW').value = b.getWest().toFixed(4);
+            document.getElementById('bboxE').value = b.getEast().toFixed(4);
+            document.getElementById('bboxS').value = b.getSouth().toFixed(4);
+            document.getElementById('bboxN').value = b.getNorth().toFixed(4);
+            updateRect([+b.getWest(), +b.getSouth(), +b.getEast(), +b.getNorth()]);
+        }
 
-const drawnItems = new L.FeatureGroup().addTo(map);
-const drawControl = new L.Control.Draw({ draw: { rectangle: true, polyline: false, circle: false, marker: false, polygon: false, circlemarker: false } });
-map.addControl(drawControl);
-map.on(L.Draw.Event.CREATED, (e) => {
-  drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
-  const b = e.layer.getBounds();
-  bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-});
+        function setStatus(m, t) {
+            const el = document.getElementById('status');
+            el.textContent = m;
+            el.className = `bg-${t==='error'?'rose':t==='ok'?'emerald':'slate'}-50 border border-${t==='error'?'rose':t==='ok'?'emerald':'slate'}-200 rounded-lg p-3 text-[11px] font-mono text-${t==='error'?'rose':t==='ok'?'emerald':'slate'}-700`;
+        }
 
-function applyPreset(key, el) {
-  const p = { izumo: [132.755, 35.367], matsue: [133.050, 35.472], shimane: [132.3, 35.1] };
-  map.setView([p[key][1], p[key][0]], (key==='shimane' ? 9 : 11));
-  document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
-  el.classList.add('on');
-}
+        function startDraw() { new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable(); }
+        function clearNDVI() { if (ndviLayer) map.removeLayer(ndviLayer); ndviLayer = null; setStatus('クリアしました'); }
 
-function startDraw() { new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable(); }
-function setStatus(msg, type='') { document.getElementById('status').className = 'status ' + type; document.getElementById('status').textContent = msg; }
-</script>
+        applyPreset('izumo');
+    </script>
 </body>
 </html>
