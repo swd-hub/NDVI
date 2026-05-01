@@ -1,315 +1,240 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NDVI Analyzer GEE — 高解像度植生解析</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NDVI Analyzer — Sentinel Hub 10m [Full Integrated]</title>
 
-    <!-- Leaflet & Components -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
-    <style>
-        /* CSS: モダンなUIデザイン */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap');
-        
-        :root {
-            --bg: #ffffff; --sidebar: #f8fafc; --accent: #059669; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --mono: 'JetBrains Mono', monospace;
-        }
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap');
+:root {
+  --bg:#ffffff; --panel:#f8fafc; --border:#cbd5e1;
+  --accent:#059669; --green:#16a34a; --text:#0f172a; --muted:#64748b;
+  --mono:'Space Mono',monospace; --sans:'Noto Sans JP',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
 
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        
-        header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--sidebar); border-bottom: 1px solid var(--border); z-index: 1000; }
-        header h1 { margin: 0; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
-        .dot.active { background: #10b981; box-shadow: 0 0 8px #10b981; }
+header{display:flex;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);z-index:1000;height:50px;}
+header h1{font-family:var(--mono);font-size:0.9rem;font-weight:700;}
+header h1 em{color:var(--accent);font-style:normal;}
 
-        .app-container { display: flex; flex: 1; overflow: hidden; }
-        
-        #sidebar { width: 340px; background: var(--sidebar); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px; box-sizing: border-box; }
-        #map { flex: 1; position: relative; }
+.app-body{display:flex;flex:1;overflow:hidden;}
+.side{width:340px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+.side-scroll{flex:1;overflow-y:auto;padding:14px;scrollbar-width:thin;}
 
-        .section-title { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px; display: flex; align-items: center; gap: 8px; }
-        .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.sh{font-family:var(--mono);font-size:0.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:16px 0 8px;display:flex;align-items:center;gap:8px;font-weight:700;}
+.sh::after{content:'';flex:1;height:1px;background:var(--border);}
 
-        .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-        label { display: block; font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
-        input, select { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-family: var(--mono); font-size: 12px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: var(--accent); }
+/* 認証・設定 */
+.cfg{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin-bottom:10px;}
+.cfg label{display:block;font-size:0.58rem;color:#047857;font-weight:700;margin-bottom:3px;}
+.cfg input{width:100%;border:1px solid #bbf7d0;border-radius:4px;padding:6px;font-size:0.75rem;font-family:var(--mono);margin-bottom:6px;}
 
-        .btn { width: 100%; padding: 10px; border-radius: 8px; border: none; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: #047857; }
-        .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
-        .btn-outline:hover { background: #f1f5f9; }
+.btn-auth{width:100%;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px;font-size:0.7rem;font-weight:700;cursor:pointer;}
+.btn-run{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px;font-size:0.85rem;font-weight:700;cursor:pointer;margin-top:10px;transition:0.2s;}
+.btn-run:disabled{background:#94a3b8;}
 
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        
-        .status-box { font-family: var(--mono); font-size: 10px; padding: 10px; border-radius: 8px; background: #fff; border: 1px solid var(--border); margin-top: 10px; color: var(--muted); line-height: 1.4; }
-        
-        .legend { position: absolute; bottom: 30px; right: 20px; z-index: 900; background: rgba(255,255,255,0.9); border: 1px solid var(--border); padding: 12px; border-radius: 12px; width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .legend-bar { height: 10px; border-radius: 5px; background: linear-gradient(to right, #8B4513, #D2B48C, #F5F5DC, #90EE90, #32CD32, #006400); margin: 8px 0; }
-        .legend-labels { display: flex; justify-content: space-between; font-size: 10px; font-family: var(--mono); color: var(--muted); }
-    </style>
+.ctrl label{display:block;font-size:0.6rem;color:var(--muted);font-weight:700;margin-bottom:2px;}
+.ctrl input, .ctrl select{width:100%;border:1px solid var(--border);border-radius:4px;padding:6px;font-size:0.8rem;font-family:var(--mono);background:#fff;}
+
+.month-disp{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--accent);text-align:center;margin:8px 0;}
+input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
+
+/* カラースケール & 不透明度 (GEE版デザイン) */
+.ndvi-colorbar{height:10px;border-radius:3px;background:linear-gradient(to right,#8B4513,#D2B48C,#F5F5DC,#90EE90,#32CD32,#006400);margin:8px 0 4px;border:1px solid rgba(0,0,0,0.1);}
+.ndvi-labels{display:flex;justify-content:space-between;font-size:0.57rem;color:var(--muted);font-family:var(--mono);}
+.opacity-row{display:flex;align-items:center;gap:10px;margin-top:5px;}
+.opacity-val{font-family:var(--mono);font-size:0.75rem;color:var(--accent);min-width:35px;text-align:right;}
+
+#map{flex:1;}
+.status{font-size:0.68rem;margin-top:10px;padding:8px;border-radius:4px;background:#fff;border:1px solid var(--border);font-family:var(--mono);line-height:1.4;}
+
+/* 凡例 (左下に配置) */
+.map-legend{position:absolute;bottom:42px;right:12px;z-index:900;background:rgba(255,255,255,0.9);border:1px solid var(--border);border-radius:8px;padding:10px;min-width:200px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
+</style>
 </head>
 <body>
 
 <header>
-    <h1>NDVI Analyzer <em>GEE</em></h1>
-    <div class="badge">
-        <div class="dot" id="auth-dot"></div>
-        <span id="auth-status">GEE 未接続</span>
-    </div>
+  <span>🛰️</span>
+  <h1 style="margin-left:8px;">NDVI Analyzer <em>[Sentinel Hub 10m Integrated]</em></h1>
+  <div style="margin-left:auto; font-size:0.65rem; color:var(--muted);" id="api-status">API: DISCONNECTED</div>
 </header>
 
-<div class="app-container">
-    <div id="sidebar">
-        <div class="section-title">GEE 接続</div>
-        <div class="card" style="background: #f0fdf4; border-color: #bbf7d0;">
-            <label>PROJECT ID</label>
-            <input type="text" id="project-id" value="ai-test-2026">
-            <label style="margin-top:8px">CLIENT ID</label>
-            <input type="text" id="client-id" value="409312431902-5qtfmognhv1rgt5esjnsu8l0p55gt201.apps.googleusercontent.com">
-            <button class="btn btn-primary" style="margin-top:12px" onclick="login()">🔑 ログイン (OAuth2)</button>
-        </div>
+<div class="app-body">
+  <div class="side">
+    <div class="side-scroll">
+      <div class="sh">CDSE AUTHENTICATION</div>
+      <div class="cfg">
+        <label>CLIENT ID</label>
+        <input type="text" id="client-id" placeholder="Your Client ID" value="b2bafe02-6d14-45bf-979f-27aaceda964c">
+        <label>CLIENT SECRET</label>
+        <input type="password" id="client-secret" placeholder="Your Client Secret" value="ed5c72c9-6ccf-4cf5-a3c0-8dd93cd436c2">
+        <!-- "ed5c72c9-6ccf-4cf5-a3c0-8dd93cd436c2""1103415f-81d1-45b2-9acf-e781abed54c6"-->
+        <button class="btn-auth" onclick="getAccessToken()">🔑 CONNECT TO CDSE</button>
+        <small style="display:block; margin-top:6px; color:var(--muted); font-size:0.65rem;">
+          💡 ページロード時に自動認証します（デフォルト情報使用）
+        </small>
+      </div>
 
-        <div class="section-title">データソース</div>
-        <div class="grid-2">
-            <button class="btn btn-outline" id="src-modis" onclick="setSource('modis')">MODIS (1km)</button>
-            <button class="btn btn-outline" id="src-sentinel" onclick="setSource('sentinel')">Sentinel-2 (10m)</button>
-        </div>
+      <div class="sh">OBSERVATION DATE</div>
+      <div class="month-disp" id="date-val">2026-04-20</div>
+      <input type="range" id="date-slider" min="0" max="365" value="365">
 
-        <div class="section-title">期間選択</div>
-        <div class="card">
-            <div id="date-label" style="text-align:center; font-weight:700; font-family:var(--mono); font-size:18px; color:var(--accent); margin-bottom:10px;">2024/01</div>
-            <input type="range" id="date-slider" min="0" max="0" value="0" oninput="updateDateLabel()">
-            <div class="grid-2" style="margin-top:10px">
-                <select id="sel-year" onchange="updateSliderFromSelect()"></select>
-                <select id="sel-month" onchange="updateSliderFromSelect()"></select>
-            </div>
-        </div>
+      <div class="sh">NDVI COLOR SCALE</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div class="ctrl"><label>MIN</label><input type="number" id="ndvi-min" value="-0.2" step="0.05"></div>
+        <div class="ctrl"><label>MAX</label><input type="number" id="ndvi-max" value="0.9" step="0.05"></div>
+      </div>
+      <div class="ndvi-colorbar"></div>
+      <div class="ndvi-labels">
+        <span id="label-min">-0.2</span><span>0.0</span><span>0.5</span><span id="label-max">0.9</span>
+      </div>
 
-        <div class="section-title">カラーレンジ / 不透明度</div>
-        <div class="grid-2">
-            <div><label>最小</label><input type="number" id="ndvi-min" value="-0.2" step="0.1"></div>
-            <div><label>最大</label><input type="number" id="ndvi-max" value="0.9" step="0.1"></div>
-        </div>
-        <div style="margin-top:10px">
-            <label>不透明度</label>
-            <input type="range" id="opacity" min="0" max="100" value="75">
-        </div>
+      <div class="sh">OPACITY (不透明度)</div>
+      <div class="opacity-row">
+        <input type="range" id="opacity-slider" min="0" max="100" value="85">
+        <span class="opacity-val" id="opacity-val">85%</span>
+      </div>
 
-        <div class="section-title">アクション</div>
-        <button class="btn btn-primary" onclick="drawNDVI()" id="btn-draw" style="height:48px; font-size:14px">🌿 NDVI 描画実行</button>
-        <div class="status-box" id="status-box">描画条件を設定して実行してください</div>
-        
-        <div class="grid-2" style="margin-top:10px">
-            <button class="btn btn-outline" onclick="clearMap()">🗑 クリア</button>
-            <button class="btn btn-outline" onclick="getTimeSeries()">📈 時系列</button>
-        </div>
+      <div class="sh">ANALYSIS BBOX</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <div class="ctrl"><label>W</label><input type="number" id="bw" value="132.70" step="0.01"></div>
+        <div class="ctrl"><label>S</label><input type="number" id="bs" value="35.35" step="0.01"></div>
+        <div class="ctrl"><label>E</label><input type="number" id="be" value="132.80" step="0.01"></div>
+        <div class="ctrl"><label>N</label><input type="number" id="bn" value="35.40" step="0.01"></div>
+      </div>
 
-        <div id="chart-container" style="display:none; margin-top:20px;">
-            <canvas id="tsChart" height="200"></canvas>
-        </div>
+      <button class="btn-run" id="btn-run" onclick="runAnalysis()" disabled>🚀 EXECUTE 10m ANALYSIS</button>
+      <div id="status" class="status">認証後に解析を実行できます</div>
     </div>
+  </div>
 
-    <div id="map">
-        <div class="legend" id="map-legend" style="display:none">
-            <div style="font-size:11px; font-weight:700; margin-bottom:4px;">🌿 NDVI 分布指標</div>
-            <div class="legend-bar"></div>
-            <div class="legend-labels"><span>-0.2</span><span>0.0</span><span>0.9</span></div>
-        </div>
-    </div>
+  <div id="map"></div>
+  
+  <div class="map-legend" id="map-legend" style="display:none;">
+    <div style="font-size:0.65rem; font-weight:700; color:var(--accent); margin-bottom:5px;">NDVI SCALE (Sentinel-2 10m)</div>
+    <div class="ndvi-colorbar"></div>
+    <div class="ndvi-labels"><span id="leg-min">-0.2</span><span>0.4</span><span id="leg-max">0.9</span></div>
+  </div>
 </div>
 
 <script>
-    // --- グローバル変数 ---
-    let map, ndviLayer, accessToken, tokenExpiry, project_id;
-    let dataSource = 'modis';
-    const GEE_BASE = 'https://earthengine.googleapis.com/v1';
+// --- Base Maps (Inherited from GEE version) ---
+const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', { attribution: '地理院標準' });
+const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { attribution: '地理院淡色' });
+const gsiRelief = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png', { attribution: '地理院標高' });
+const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { attribution: 'Google' });
+const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '地理院航空' });
 
-    // --- 日付リスト生成 ---
-    function buildDates() {
-        const dates = [];
-        const now = new Date();
-        let y = 2000, m = 3;
-        while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
-            const d = new Date(Date.UTC(y, m - 1, 1));
-            dates.push({
-                label: `${y}/${String(m).padStart(2, '0')}`,
-                iso: `${y}-${String(m).padStart(2, '0')}-01`,
-                next: m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2, '0')}-01`
-            });
-            if (++m > 12) { m = 1; y++; }
-        }
-        return dates;
+const map = L.map('map', { center: [35.367, 132.755], zoom: 13, layers: [gsiPale] });
+L.control.layers({
+  '🗺 国土地理院(淡色)': gsiPale, '🗺 国土地理院(標準)': gsiStd, '🗺 地理院標高図': gsiRelief,
+  '🛰 Google衛星画像': googleSat, '🛰 地理院航空写真': gsiPhoto
+}, null, { position: 'bottomleft' }).addTo(map);
+
+let accessToken = null, ndviLayer = null;
+
+// --- GEE-style UI Logic ---
+document.getElementById('date-slider').oninput = function() {
+  const d = new Date(); d.setDate(d.getDate() - (365 - this.value));
+  document.getElementById('date-val').textContent = d.toISOString().split('T')[0];
+};
+
+['ndvi-min', 'ndvi-max'].forEach(id => {
+  document.getElementById(id).oninput = function() {
+    const min = document.getElementById('ndvi-min').value;
+    const max = document.getElementById('ndvi-max').value;
+    document.getElementById('label-min').textContent = document.getElementById('leg-min').textContent = min;
+    document.getElementById('label-max').textContent = document.getElementById('leg-max').textContent = max;
+  };
+});
+
+document.getElementById('opacity-slider').oninput = function() {
+  document.getElementById('opacity-val').textContent = this.value + '%';
+  if(ndviLayer) ndviLayer.setOpacity(this.value / 100);
+};
+
+// --- API Auth ---
+async function getAccessToken() {
+  const id = document.getElementById('client-id').value;
+  const sec = document.getElementById('client-secret').value;
+  try {
+    const res = await fetch("https://identity.dataspace.copernicus.eu/auth/realms/IDP/protocol/openid-connect/token", {
+      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body: new URLSearchParams({grant_type:"client_credentials", client_id:id, client_secret:sec})
+    });
+    const data = await res.json();
+    if(data.access_token) {
+      accessToken = data.access_token;
+      document.getElementById('api-status').textContent = "API: CONNECTED";
+      document.getElementById('btn-run').disabled = false;
+      document.getElementById('status').innerHTML = "<span style='color:var(--green)'>✓ 接続成功</span>";
     }
-    const DATES = buildDates();
+  } catch(e) { document.getElementById('status').textContent = "認証失敗"; }
+}
 
-    // --- 地図初期化 ---
-    function initMap() {
-        const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { attribution: '国土地理院' });
-        const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google' });
-        const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
-        const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: 'Carto' });
+// --- Analysis Fetch ---
+async function runAnalysis() {
+  const date = document.getElementById('date-val').textContent;
+  const nMin = +document.getElementById('ndvi-min').value;
+  const nMax = +document.getElementById('ndvi-max').value;
+  const w = +document.getElementById('bw').value, s = +document.getElementById('bs').value;
+  const e = +document.getElementById('be').value, n = +document.getElementById('bn').value;
 
-        map = L.map('map', { center: [35.36, 132.75], zoom: 11, layers: [gsiPale] });
-        
-        const baseLayers = {
-            "地理院地図 (淡色)": gsiPale,
-            "地理院地図 (標準)": L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', { attribution: '国土地理院' }),
-            "地理院地図 (写真)": L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '国土地理院' }),
-            "Google 衛星画像": googleSat,
-            "Google マップ": L.tileLayer('https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}', { attribution: 'Google' }),
-            "Esri 衛星画像": esriSat,
-            "Esri 地形図": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' }),
-            "Carto Dark": cartoDark,
-            "OpenTopoMap": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: 'OpenTopo' })
-        };
+  // 動的なEvalscript (GEE版のようにスケールを反映)
+  const script = `
+    function setup(){ return {input:["B04","B08"], output:{bands:3}}; }
+    function evaluatePixel(s){
+      let v = (s.B08 - s.B04) / (s.B08 + s.B04);
+      let min = ${nMin}, max = ${nMax};
+      if (v < min) return [0.5, 0.3, 0.1]; // 褐色
+      if (v > max) return [0.0, 0.4, 0.0]; // 深緑
+      let f = (v - min) / (max - min);
+      return [0.9 - f*0.9, 0.9, 0.8 - f*0.8]; // 簡易カラースケール
+    }`;
 
-        L.control.layers(baseLayers, null, { position: 'bottomleft' }).addTo(map);
-    }
+  document.getElementById('status').textContent = "10mデータを取得中...";
+  try {
+    const res = await fetch("https://sh.dataspace.copernicus.eu/api/v1/process", {
+      method:"POST",
+      headers:{"Authorization":`Bearer ${accessToken}`,"Content-Type":"application/json","Accept":"image/png"},
+      body: JSON.stringify({
+        input: { bounds: { bbox:[w,s,e,n], properties:{crs:"http://www.opengis.net/def/crs/OGC/1.3/CRS84"} },
+                 data: [{ type: "S2L2A", dataFilter:{timeRange:{from:date+"T00:00:00Z",to:date+"T23:59:59Z"}} }] },
+        output: { width:800, height:800 }, evalscript: script
+      })
+    });
+    if(!res.ok) throw new Error("データなし（雲の可能性）");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    if(ndviLayer) map.removeLayer(ndviLayer);
+    ndviLayer = L.imageOverlay(url, [[s,w],[n,e]], {opacity: document.getElementById('opacity-slider').value / 100}).addTo(map);
+    map.fitBounds([[s,w],[n,e]]);
+    document.getElementById('map-legend').style.display = 'block';
+    document.getElementById('status').innerHTML = "<span style='color:var(--green)'>✓ 解析完了</span>";
+  } catch(err) { document.getElementById('status').innerHTML = "<span style='color:var(--red)'>エラー: "+err.message+"</span>"; }
+}
 
-    // --- 認証 ---
-    function login() {
-        const client_id = document.getElementById('client-id').value;
-        project_id = document.getElementById('project-id').value;
-
-        const tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: client_id,
-            scope: 'https://www.googleapis.com/auth/earthengine.readonly',
-            callback: (resp) => {
-                accessToken = resp.access_token;
-                tokenExpiry = Date.now() + (resp.expires_in * 1000);
-                document.getElementById('auth-dot').classList.add('active');
-                document.getElementById('auth-status').innerText = 'GEE 接続済';
-                setStatus('認証成功 ✓', 'success');
-            }
-        });
-        tokenClient.requestAccessToken({ prompt: '' });
-    }
-
-    // --- 描画ロジック ---
-    async function drawNDVI() {
-        if (!accessToken) return alert('まずログインしてください');
-        const idx = document.getElementById('date-slider').value;
-        const d = DATES[idx];
-        const min = document.getElementById('ndvi-min').value;
-        const max = document.getElementById('ndvi-max').value;
-        const op = document.getElementById('opacity').value / 100;
-
-        setStatus('解析リクエスト送信中...', 'loading');
-
-        try {
-            const expr = buildExpression(d.iso, d.next, min, max);
-            const res = await fetch(`${GEE_BASE}/projects/${project_id}/maps`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expression: expr, fileFormat: 'PNG' })
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error.message);
-
-            if (ndviLayer) map.removeLayer(ndviLayer);
-            
-            // 認証付きタイルレイヤー（簡易実装）
-            ndviLayer = L.gridLayer({ opacity: op, zIndex: 1000 });
-            ndviLayer.createTile = function(coords, done) {
-                const canvas = document.createElement('canvas');
-                canvas.width = canvas.height = 256;
-                const url = `${GEE_BASE}/${data.name}/tiles/${coords.z}/${coords.x}/${coords.y}`;
-                fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } })
-                    .then(r => r.blob())
-                    .then(blob => createImageBitmap(blob))
-                    .then(img => {
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        done(null, canvas);
-                    }).catch(() => done(null, canvas));
-                return canvas;
-            };
-            ndviLayer.addTo(map);
-            document.getElementById('map-legend').style.display = 'block';
-            setStatus(`${d.label} の描画完了 ✓`, 'success');
-        } catch (e) {
-            setStatus('エラー: ' + e.message, 'error');
-        }
-    }
-
-    function buildExpression(start, end, min, max) {
-        const collection = dataSource === 'sentinel' ? 'COPERNICUS/S2_SR_HARMONIZED' : 'MODIS/061/MOD13A3';
-        const band = 'NDVI';
-        const minRaw = min / 0.0001; 
-        const maxRaw = max / 0.0001;
-
-        return {
-            values: {
-                col: { functionInvocationValue: { functionName: 'ImageCollection.load', arguments: { id: { constantValue: collection } } } },
-                filtered: { functionInvocationValue: { functionName: 'ImageCollection.filterDate', arguments: { collection: { valueReference: 'col' }, start: { constantValue: start }, end: { constantValue: end } } } },
-                img: { functionInvocationValue: { functionName: 'ImageCollection.first', arguments: { collection: { valueReference: 'filtered' } } } },
-                sel: { functionInvocationValue: { functionName: 'Image.select', arguments: { input: { valueReference: 'img' }, bandSelectors: { constantValue: [dataSource === 'sentinel' ? 'B8' : 'NDVI'] } } } },
-                vis: { functionInvocationValue: { functionName: 'Image.visualize', arguments: { 
-                    image: { valueReference: 'sel' }, 
-                    min: { constantValue: dataSource === 'sentinel' ? 0 : minRaw }, 
-                    max: { constantValue: dataSource === 'sentinel' ? 1 : maxRaw },
-                    palette: { constantValue: ['8B4513','D2B48C','F5F5DC','90EE90','32CD32','006400'] }
-                } } }
-            },
-            result: 'vis'
-        };
-    }
-
-    // --- UI同期 ---
-    function updateDateLabel() {
-        const idx = document.getElementById('date-slider').value;
-        document.getElementById('date-label').innerText = DATES[idx].label;
-    }
-
-    function setSource(src) {
-        dataSource = src;
-        document.getElementById('src-modis').classList.toggle('btn-primary', src === 'modis');
-        document.getElementById('src-modis').classList.toggle('btn-outline', src !== 'modis');
-        document.getElementById('src-sentinel').classList.toggle('btn-primary', src === 'sentinel');
-        document.getElementById('src-sentinel').classList.toggle('btn-outline', src !== 'sentinel');
-    }
-
-    function setStatus(msg, type) {
-        const box = document.getElementById('status-box');
-        box.innerText = msg;
-        box.style.borderColor = type === 'error' ? '#fda4af' : type === 'success' ? '#6ee7b7' : '#e2e8f0';
-    }
-
-    // 初期化
-    window.onload = () => {
-        initMap();
-        const slider = document.getElementById('date-slider');
-        slider.max = DATES.length - 1;
-        slider.value = DATES.length - 1;
-        updateDateLabel();
-        
-        // 年月セレクトボックス初期化
-        const years = [...new Set(DATES.map(d => d.iso.split('-')[0]))];
-        document.getElementById('sel-year').innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
-        document.getElementById('sel-month').innerHTML = Array.from({length:12}, (_,i)=>`<option value="${i+1}">${i+1}月</option>`).join('');
-    };
-
-    function updateSliderFromSelect() {
-        const y = document.getElementById('sel-year').value;
-        const m = document.getElementById('sel-month').value;
-        const label = `${y}/${String(m).padStart(2,'0')}`;
-        const idx = DATES.findIndex(d => d.label === label);
-        if (idx !== -1) {
-            document.getElementById('date-slider').value = idx;
-            updateDateLabel();
-        }
-    }
+// --- ページロード時に自動認証 ---
+window.addEventListener('load', function() {
+  const id = document.getElementById('client-id').value;
+  const sec = document.getElementById('client-secret').value;
+  
+  // ダミー値でない場合は自動認証を試みる
+  if(id && id !== 'YOUR_CLIENT_ID_HERE' && sec && sec !== 'YOUR_CLIENT_SECRET_HERE') {
+    console.log('[Auto-Auth] デフォルト認証情報で接続を試みます...');
+    getAccessToken();
+  } else {
+    console.log('[Auto-Auth] デフォルト認証情報がセットされていません。手動で入力してください。');
+  }
+});
 </script>
-
 </body>
 </html>
