@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NDVI API Analyzer</title>
 
+  <!-- 外部ライブラリ (CDN) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -12,6 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3"></script>
   <script>
+    // GeoTIFFのグローバル定義調整
     if (typeof window.GeoTIFF === 'undefined' && typeof window.geotiff !== 'undefined') {
       window.GeoTIFF = window.geotiff;
     }
@@ -55,6 +57,7 @@
 
     .app-body { display: flex; flex: 1; overflow: hidden; }
 
+    /* サイドバー */
     .side {
       width: 340px; min-width: 280px; background: var(--panel);
       border-right: 1px solid var(--border); display: flex; flex-direction: column;
@@ -81,7 +84,6 @@
       display: block; font-family: var(--mono); font-size: 0.6rem; font-weight: 700;
       color: var(--muted); text-transform: uppercase; margin-bottom: 4px; margin-top: 8px;
     }
-    .cfg label:first-of-type { margin-top: 0; }
     .cfg select, .cfg input[type="date"] {
       width: 100%; background: var(--panel); border: 1px solid var(--border);
       border-radius: 5px; color: var(--text); padding: 6px 9px; font-size: 0.75rem;
@@ -91,12 +93,10 @@
       border-color: var(--accent); box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
     }
 
-    /* 雲量スライダー行 */
     .cloud-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
     .cloud-row input[type="range"] { flex: 1; accent-color: var(--accent); }
     .cloud-val { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); font-weight: 700; min-width: 34px; text-align: right; }
 
-    /* シーン読込ボタン */
     .load-btn {
       background: var(--accent); color: #fff; border: none; border-radius: 3px;
       padding: 3px 8px; font-size: 0.65rem; cursor: pointer; font-weight: 700; flex-shrink: 0;
@@ -109,15 +109,9 @@
       background: var(--panel); border-left: 3px solid var(--accent); border-radius: 4px;
       font-size: 0.7rem; border: 1px solid var(--border); border-left-width: 3px;
     }
-    .file-item.scene-ok  { border-left-color: var(--green); }
-    .file-item.scene-bad { border-left-color: #f59e0b; }
     .file-item-info { flex: 1; min-width: 0; }
     .file-item-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .file-item-meta { font-size: 0.65rem; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
-    .epsg-badge {
-      display: inline-block; background: rgba(5, 150, 105, 0.1); color: var(--accent);
-      font-size: 0.6rem; font-weight: 700; padding: 1px 5px; border-radius: 8px; margin-left: 4px;
-    }
     .del-btn {
       background: var(--red); color: #fff; border: none; border-radius: 3px;
       padding: 3px 8px; font-size: 0.65rem; cursor: pointer; font-weight: 700;
@@ -171,6 +165,7 @@
 
     .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 10px; margin-top: 6px; }
 
+    /* 地図エリア */
     .map-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     #map { flex: 1; }
 
@@ -203,7 +198,7 @@
     <span class="sat">🌾</span>
     <h1>NDVI API Analyzer <em>[Sentinel-2 / 10m]</em></h1>
     <div class="hbadge">
-      <span id="lib-status" style="color:#aaa;">ライブラリ読込中...</span>
+      <span id="lib-status" style="color:#aaa;">ライブラリ確認中...</span>
     </div>
   </header>
 
@@ -211,7 +206,7 @@
     <div class="side" id="sidebar">
       <div class="side-scroll">
 
-        <!-- ── シーン検索 (元: ファイル読み込み) ── -->
+        <!-- シーン検索 -->
         <div class="sh">シーン検索</div>
         <div class="cfg">
           <div class="row2">
@@ -227,13 +222,12 @@
           <ul class="file-list" id="sceneList"></ul>
         </div>
 
-        <!-- ── 読込済みシーン ── -->
         <div id="sec-loaded" style="display:none">
-          <div class="sh">読込済みシーン</div>
+          <div class="sh">利用可能なシーン</div>
           <ul class="file-list" id="fileList"></ul>
         </div>
 
-        <!-- ── 表示設定 (元と完全同一) ── -->
+        <!-- 表示設定 -->
         <div id="sec-band" style="display:none;">
           <div class="sh">表示設定</div>
           <div class="cfg">
@@ -247,20 +241,12 @@
                 <div><label>赤 (B04)</label><select id="redBand"></select></div>
                 <div><label>近赤外 (B08)</label><select id="nirBand"></select></div>
               </div>
-              <button class="btn-run" id="computeBtn">🔢 NDVI 計算</button>
+              <button class="btn-run" id="computeBtn">🔢 NDVI 計算実行</button>
             </div>
 
             <div id="panel-single" style="display:none">
-              <label>バンド</label><select id="singleBand" style="margin-bottom:6px;"></select>
-              <label>カラーマップ</label>
-              <select id="colormap" style="margin-bottom:8px;">
-                <option value="ndvi">NDVI（緑系）</option>
-                <option value="gray">グレースケール</option>
-                <option value="hot">ヒート（黒→赤→黄）</option>
-                <option value="blue">ブルー</option>
-                <option value="spectral">スペクトル</option>
-              </select>
-              <button class="btn-run" id="displayBtn">🖼️ 表示</button>
+              <label>表示バンド</label><select id="singleBand" style="margin-bottom:6px;"></select>
+              <button class="btn-run" id="displayBtn">🖼️ 描画</button>
             </div>
 
             <div class="opacity-row">
@@ -271,9 +257,9 @@
           </div>
         </div>
 
-        <div class="status" id="status">✦ Sentinel-2 シーンを検索してください</div>
+        <div class="status" id="status">✦ 検索条件を指定して検索してください</div>
 
-        <!-- ── 全体統計 (元と完全同一) ── -->
+        <!-- 統計 -->
         <div id="sec-stats" style="display:none">
           <div class="sh">全体統計</div>
           <div class="stats-mini">
@@ -287,7 +273,7 @@
           </div>
         </div>
 
-        <!-- ── 地域プリセット (元と完全同一) ── -->
+        <!-- 地域プリセット -->
         <div class="sh">地域プリセット</div>
         <div class="preset-grid">
           <button class="pbtn" onclick="applyPreset('izumo')">📍 出雲市</button>
@@ -296,9 +282,9 @@
           <button class="pbtn" onclick="applyPreset('shimane')">📍 島根県</button>
         </div>
 
-        <!-- ── ヒストグラム (元と完全同一) ── -->
+        <!-- ヒストグラム -->
         <div id="chart-wrap" style="display:none">
-          <div class="sh">領域内 NDVI ヒストグラム</div>
+          <div class="sh">選択領域の NDVI 分布</div>
           <div class="chart-box">
             <canvas id="hist-chart" height="180"></canvas>
           </div>
@@ -311,18 +297,17 @@
     <div class="map-area">
       <div id="map"></div>
       <div class="map-toolbar">
-        <button class="tbtn" id="btn-draw">📐 領域指定 (ヒストグラム)</button>
+        <button class="tbtn" id="btn-draw">📐 領域指定 (評価)</button>
         <button class="tbtn" id="btn-clear-draw">🗑 選択クリア</button>
       </div>
       <div class="map-legend" id="map-legend" style="display:none">
-        <div class="leg-title" id="leg-title">NDVI 値</div>
+        <div class="leg-title" id="leg-title">NDVI</div>
         <canvas id="leg-canvas" height="12" style="width:100%; border-radius:4px; margin-bottom:4px;"></canvas>
-        <div class="leg-labels"><span id="l-min">-0.2</span><span id="l-mid">0.0</span><span id="l-max">1.0</span></div>
+        <div class="leg-labels"><span id="l-min">-0.2</span><span id="l-mid">0.4</span><span id="l-max">1.0</span></div>
       </div>
       <div class="map-info-bar">
-        <span>データ: <span class="cl">Sentinel-2 L2A 10m / Element84 Earth Search</span></span>
-        <span>マウス: <span class="cl" id="mc">—</span></span>
-        <span style="margin-left:auto">© ESA · © OSM · © CARTO</span>
+        <span>データ: <span class="cl">Sentinel-2 10m (Element84 API)</span></span>
+        <span>座標: <span class="cl" id="mc">—</span></span>
       </div>
     </div>
   </div>
@@ -330,48 +315,32 @@
   <script>
     'use strict';
 
-    // =====================================================
-    // proj4 座標系定義 (元と同一)
-    // =====================================================
+    // 座標系設定
     function setupProj4() {
       if (typeof proj4 === 'undefined') return;
       proj4.defs([
         ['EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs'],
-        ['EPSG:4612', '+proj=longlat +ellps=GRS80 +no_defs'],
-        ['EPSG:6668', '+proj=longlat +ellps=GRS80 +no_defs'],
         ['EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +no_defs'],
         ['EPSG:32652', '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs'],
         ['EPSG:32653', '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs'],
         ['EPSG:32654', '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs'],
         ['EPSG:32655', '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs'],
-        ['EPSG:6669', '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:6670', '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:6671', '+proj=tmerc +lat_0=36 +lon_0=132.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:6672', '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:6673', '+proj=tmerc +lat_0=36 +lon_0=134.333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:6674', '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:2443', '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:2445', '+proj=tmerc +lat_0=36 +lon_0=132.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
-        ['EPSG:2446', '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'],
+        ['EPSG:6671', '+proj=tmerc +lat_0=36 +lon_0=132.166666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs']
       ]);
     }
 
-    // =====================================================
-    // 状態 (元と同一)
-    // =====================================================
     const S = {
       files: {},
       searchResults: [],
       layer: null,
       map: null,
       opacity: 0.80,
-      mode: 'ndvi',
-      drawnItems: null,
-      drawControl: null,
       currentData: null,
       currentBbox: null,
       currentWidth: 0,
-      currentHeight: 0
+      currentHeight: 0,
+      drawnItems: null,
+      drawControl: null
     };
 
     let tsChart = null;
@@ -387,43 +356,34 @@
       if (S.map && PRESETS[key]) S.map.setView(PRESETS[key].center, PRESETS[key].zoom);
     };
 
-    // =====================================================
-    // 初期化
-    // =====================================================
     window.addEventListener('DOMContentLoaded', () => {
       setupProj4();
 
-      // デフォルト日付
-      const today = new Date();
-      const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(today.getMonth() - 6);
-      document.getElementById('dateTo').value   = today.toISOString().slice(0, 10);
-      document.getElementById('dateFrom').value = sixMonthsAgo.toISOString().slice(0, 10);
+      // 日付初期値
+      const d = new Date();
+      document.getElementById('dateTo').value = d.toISOString().slice(0, 10);
+      d.setMonth(d.getMonth() - 6);
+      document.getElementById('dateFrom').value = d.toISOString().slice(0, 10);
 
-      // ライブラリ確認
-      const hasL  = typeof L !== 'undefined';
-      const hasGT = typeof GeoTIFF !== 'undefined';
-      const hasPj4 = typeof proj4 !== 'undefined';
-      const ok = hasL && hasGT;
-      const lsEl = document.getElementById('lib-status');
-      lsEl.textContent = ok ? '✅ 準備完了' + (hasPj4 ? '' : ' (proj4なし)') : '⚠️ ライブラリ読込失敗';
-      lsEl.style.color  = ok ? '#16a34a' : '#ef4444';
+      // 地図定義
+      const gsiPale      = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",          { attribution:"地理院淡色" });
+      const gsiStd       = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",           { attribution:"地理院標準" });
+      const gsiRelief    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",        { attribution:"地理院標高図" });
+      const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",     { attribution:"©CARTO" });
+      const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{ attribution:"©CARTO" });
+      const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",      { attribution:"©CARTO" });
+      const esriStreet   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",{ attribution:"©Esri" });
+      const esriTopo     = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",  { attribution:"©Esri" });
+      const openTopo     = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                   { attribution:"©OpenTopoMap" });
+      const googleMap    = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}",               { attribution:"©Google" });
+      const gsiPhoto     = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { attribution:"地理院空中写真" });
+      const esriSat      = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution:"©Esri" });
+      const googleSat    = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
+          subdomains:["mt0","mt1","mt2","mt3"],
+          attribution:"©Google"
+      });
 
-      // ── 地図初期化 (元と同一) ──
-      const gsiPale      = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",          { maxNativeZoom:18,maxZoom:22,attribution:"地理院淡色" });
-      const gsiStd       = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",           { maxNativeZoom:18,maxZoom:22,attribution:"地理院標準" });
-      const gsiRelief    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",        { maxNativeZoom:15,maxZoom:22,attribution:"地理院標高" });
-      const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",     { maxNativeZoom:19,maxZoom:22,attribution:"©CARTO" });
-      const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{ maxNativeZoom:19,maxZoom:22,attribution:"©CARTO" });
-      const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",      { maxNativeZoom:19,maxZoom:22,attribution:"©CARTO" });
-      const esriStreet   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",{ maxNativeZoom:19,maxZoom:22,attribution:"©Esri" });
-      const esriTopo     = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",  { maxNativeZoom:19,maxZoom:22,attribution:"©Esri" });
-      const openTopo     = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                   { maxNativeZoom:17,maxZoom:22,attribution:"©OpenTopoMap" });
-      const googleMap    = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}",               { maxNativeZoom:20,maxZoom:22,attribution:"©Google" });
-      const gsiPhoto     = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { maxNativeZoom:18,maxZoom:22,attribution:"地理院航空写真" });
-      const esriSat      = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom:19,maxZoom:22,attribution:"©Esri" });
-      const googleSat    = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",{ maxNativeZoom:20,maxZoom:22,subdomains:["mt0","mt1","mt2","mt3"],attribution:"©Google" });
-
-      S.map = L.map('map', { center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, layers: [gsiPale], renderer: L.svg() });
+      S.map = L.map('map', { center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, layers: [gsiPale] });
       L.control.layers({
         "🗺 国土地理院(淡色)":gsiPale, "🗺 国土地理院(標準)":gsiStd, "🗺 地理院色別標高図":gsiRelief,
         "🗺 白地図(Carto)":cartoLight, "🗺 自然色地図(Voyager)":cartoVoyager, "🗺 ダーク地図(Carto)":cartoDark,
@@ -449,560 +409,253 @@
       });
 
       setupEvents();
-      setupResizer();
+      
+      const hasL = typeof L !== 'undefined';
+      const hasGT = typeof GeoTIFF !== 'undefined';
+      const lsEl = document.getElementById('lib-status');
+      lsEl.textContent = (hasL && hasGT) ? '✅ Ready' : '⚠️ Library Error';
+      lsEl.style.color = (hasL && hasGT) ? '#16a34a' : '#ef4444';
     });
 
-    // =====================================================
-    // イベント登録
-    // =====================================================
     function setupEvents() {
-      // 雲量スライダー
       document.getElementById('cloudMax').addEventListener('input', function() {
         document.getElementById('cloudMaxLabel').textContent = this.value + '%';
       });
-
-      // シーン検索
       document.getElementById('searchBtn').addEventListener('click', searchScenes);
-
-      // シーンリスト 読込ボタン (イベント委譲)
       document.getElementById('sceneList').addEventListener('click', async e => {
         const btn = e.target.closest('.load-btn');
         if (!btn) return;
         const idx = parseInt(btn.dataset.idx, 10);
-        const feature = S.searchResults[idx];
-        if (!feature) return;
         btn.disabled = true;
         btn.textContent = '…';
-        await loadScene(feature);
+        await loadScene(S.searchResults[idx]);
         btn.disabled = false;
         btn.textContent = '読込';
       });
-
-      // 読込済みシーン 削除ボタン
-      document.getElementById('fileList').addEventListener('click', e => {
-        if (!e.target.classList.contains('del-btn')) return;
-        const name = e.target.closest('.file-item').dataset.name;
-        delete S.files[name];
-        renderFileList();
-        refreshSelects();
-        if (!Object.keys(S.files).length) {
-          document.getElementById('sec-loaded').style.display = 'none';
-          document.getElementById('sec-band').style.display   = 'none';
-          document.getElementById('sec-stats').style.display  = 'none';
-        }
-      });
-
-      document.getElementById('tab-ndvi').addEventListener('click',   () => switchMode('ndvi'));
-      document.getElementById('tab-single').addEventListener('click', () => switchMode('single'));
+      document.getElementById('tab-ndvi').addEventListener('click', () => switchTab('ndvi'));
+      document.getElementById('tab-single').addEventListener('click', () => switchTab('single'));
       document.getElementById('computeBtn').addEventListener('click', computeNDVI);
-      document.getElementById('displayBtn').addEventListener('click', displaySingle);
-
       document.getElementById('opacity').addEventListener('input', function() {
         S.opacity = this.value / 100;
         document.getElementById('opacityLabel').textContent = this.value + '%';
         if (S.layer) S.layer.setOpacity(S.opacity);
       });
-
       document.getElementById('btn-draw').addEventListener('click', () => {
-        if (!S.currentData) { setStatus('先に NDVI を計算・表示してください', 'error'); return; }
+        if (!S.currentData) { setStatus('先にデータを表示してください', 'error'); return; }
         new L.Draw.Rectangle(S.map, S.drawControl.options.draw.rectangle).enable();
       });
-
       document.getElementById('btn-clear-draw').addEventListener('click', () => {
         S.drawnItems.clearLayers();
         document.getElementById('chart-wrap').style.display = 'none';
-        if (tsChart) { tsChart.destroy(); tsChart = null; }
       });
     }
 
-    function setupResizer() {
-      const resizer = document.getElementById('resizer');
-      const sidebar = document.getElementById('sidebar');
-      let isResizing = false;
-      resizer.addEventListener('mousedown', () => { isResizing = true; resizer.classList.add('active'); });
-      document.addEventListener('mousemove', e => {
-        if (!isResizing) return;
-        sidebar.style.width = Math.max(280, Math.min(e.clientX, window.innerWidth - 100)) + 'px';
-        if (S.map) S.map.invalidateSize();
-      });
-      document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); } });
-    }
-
-    // =====================================================
-    // Element84 Earth Search STAC 検索
-    // =====================================================
     async function searchScenes() {
       const btn = document.getElementById('searchBtn');
       btn.disabled = true;
-      setStatus('Earth Search (AWS) を検索中...', 'loading');
-
+      setStatus('Earth Search API 検索中...', 'loading');
       try {
-        const bounds   = S.map.getBounds();
+        const bounds = S.map.getBounds();
         const dateFrom = document.getElementById('dateFrom').value;
-        const dateTo   = document.getElementById('dateTo').value;
+        const dateTo = document.getElementById('dateTo').value;
         const cloudMax = parseInt(document.getElementById('cloudMax').value, 10);
 
-        if (!dateFrom || !dateTo) { setStatus('日付を入力してください', 'error'); btn.disabled = false; return; }
-
+        // STAC API v1 固定ソート仕様
         const body = {
           collections: ['sentinel-2-l2a'],
           bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
           datetime: dateFrom + 'T00:00:00Z/' + dateTo + 'T23:59:59Z',
           query: { 'eo:cloud_cover': { lte: cloudMax } },
           limit: 12,
-          sortby: ['-datetime']
+          sortby: [{ field: "properties.datetime", direction: "desc" }]
         };
 
         const resp = await fetch('https://earth-search.aws.element84.com/v1/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-        if (!resp.ok) throw new Error('STAC HTTP ' + resp.status);
-
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
-        const features = data.features || [];
-
-        if (!features.length) {
-          setStatus('シーンが見つかりません。雲量・日付を広げてください', 'error');
-          btn.disabled = false; return;
-        }
-
-        S.searchResults = features;
-        renderSceneList(features);
-        setStatus('✅ ' + features.length + ' 件のシーンが見つかりました', 'ok');
-
-      } catch(e) {
-        setStatus('検索エラー: ' + e.message, 'error');
-        console.error('[searchScenes]', e);
-      }
+        S.searchResults = data.features || [];
+        renderResults();
+        setStatus(`✅ ${S.searchResults.length} 件のシーンを抽出`, 'ok');
+      } catch(e) { setStatus('検索エラー: ' + e.message, 'error'); }
       btn.disabled = false;
     }
 
-    function renderSceneList(features) {
+    function renderResults() {
       const ul = document.getElementById('sceneList');
-      ul.innerHTML = '';
-      features.forEach((f, idx) => {
-        const date  = (f.properties.datetime || '').slice(0, 10);
-        const cloud = parseFloat(f.properties['eo:cloud_cover'] || 0).toFixed(1);
-        const platRaw = (f.properties.platform || 'sentinel-2').toLowerCase();
-        const plat  = platRaw.includes('2a') ? 'S2A' : platRaw.includes('2b') ? 'S2B' : 'S2';
-        const m = f.id.match(/T\d{2}[A-Z]{3}/);
-        const tile = m ? m[0] : '';
-        const cloudN = parseFloat(cloud);
-        const cls  = cloudN < 10 ? 'scene-ok' : cloudN > 50 ? 'scene-bad' : '';
-        const icon = cloudN < 10 ? '☀️' : cloudN < 40 ? '⛅' : '☁️';
-
-        const li = document.createElement('li');
-        li.className = 'file-item ' + cls;
-        li.innerHTML =
-          '<div class="file-item-info">' +
-            '<div class="file-item-name">' + date + '<span class="epsg-badge">' + plat + '</span></div>' +
-            '<div class="file-item-meta">' + icon + ' 雲量 ' + cloud + '% · ' + tile + '</div>' +
-          '</div>' +
-          '<button class="load-btn" data-idx="' + idx + '">読込</button>';
-        ul.appendChild(li);
-      });
+      ul.innerHTML = S.searchResults.map((f, i) => `
+        <li class="file-item">
+          <div class="file-item-info">
+            <div class="file-item-name">${f.properties.datetime.slice(0,10)}</div>
+            <div class="file-item-meta">雲量: ${f.properties['eo:cloud_cover'].toFixed(1)}%</div>
+          </div>
+          <button class="load-btn" data-idx="${i}">読込</button>
+        </li>
+      `).join('');
     }
 
-    // =====================================================
-    // COG 読み込み (Sentinel-2 B04 赤 + B08 NIR)
-    // =====================================================
     async function loadScene(feature) {
-      setStatus('COG 読み込み中...', 'loading');
+      setStatus('COGデータを取得中...', 'loading');
       try {
         const assets = feature.assets;
-        // Element84 のバンド名
-        const b04Asset = assets.red  || assets.B04 || assets.b04;
-        const b08Asset = assets.nir  || assets.B08 || assets.b08 || assets.nir08;
+        const toHttps = (url) => url.startsWith('s3://') ? url.replace(/^s3:\/\/([^/]+)\/(.+)$/, 'https://$1.s3.us-west-2.amazonaws.com/$2') : url;
 
-        if (!b04Asset || !b08Asset) {
-          throw new Error('B04/B08 アセットなし。利用可能: ' + Object.keys(assets).join(', '));
-        }
-
-        // s3:// → https:// 変換
-        const toHttps = href => href.startsWith('s3://')
-          ? href.replace(/^s3:\/\/([^/]+)\/(.+)$/, 'https://$1.s3.us-west-2.amazonaws.com/$2')
-          : href;
-
-        const url04 = toHttps(b04Asset.href);
-        const url08 = toHttps(b08Asset.href);
-
-        setStatus('📥 B04 (赤) 読み込み中...', 'loading');
-        const tiff04 = await GeoTIFF.fromUrl(url04, { allowFullFile: false });
-
-        setStatus('📥 B08 (NIR) 読み込み中...', 'loading');
-        const tiff08 = await GeoTIFF.fromUrl(url08, { allowFullFile: false });
-
-        // オーバービュー ~512px を選択
-        const [img04, img08] = await Promise.all([
-          pickOverview(tiff04, 512),
-          pickOverview(tiff08, 512)
-        ]);
-
-        const w    = img04.getWidth();
-        const h    = img04.getHeight();
-        const bbox = img04.getBoundingBox();
-        const epsg = getEPSG(img04);
-        const reprojBbox = toWGS84(bbox, epsg);
-
-        setStatus('📊 ラスタ読み込み中 (' + w + '×' + h + ')...', 'loading');
-        const [ras04, ras08] = await Promise.all([ img04.readRasters(), img08.readRasters() ]);
-
-        const date  = (feature.properties.datetime || '').slice(0, 10);
-        const platRaw = (feature.properties.platform || 'S2').toLowerCase();
-        const plat  = platRaw.includes('2a') ? 'S2A' : platRaw.includes('2b') ? 'S2B' : 'S2';
-        const m = feature.id.match(/T\d{2}[A-Z]{3}/);
-        const tile = m ? m[0] : '';
-        const displayName = date + ' (' + plat + (tile ? ' · ' + tile : '') + ')';
+        const tiff04 = await GeoTIFF.fromUrl(toHttps((assets.red || assets.B04).href));
+        const tiff08 = await GeoTIFF.fromUrl(toHttps((assets.nir || assets.B08 || assets.b08).href));
+        
+        const img04 = await tiff04.getImage();
+        const img08 = await tiff08.getImage();
+        
+        // 高速化のためオーバービュー（低解像度）を使用
+        const w = 512, h = Math.round(512 * (img04.getHeight() / img04.getWidth()));
+        const ras04 = await img04.readRasters({ width: w, height: h });
+        const ras08 = await img08.readRasters({ width: w, height: h });
 
         const sceneId = feature.id;
         S.files[sceneId] = {
           data: [ras04[0], ras08[0]],
-          width: w, height: h, bands: 2,
-          bbox, epsg, reprojBbox,
-          displayName,
-          bandNames: ['B04 (赤)', 'B08 (NIR)']
+          width: w, height: h,
+          bbox: img04.getBoundingBox(),
+          epsg: img04.geoKeys ? (img04.geoKeys.ProjectedCSTypeGeoKey || img04.geoKeys.GeographicTypeGeoKey) : null,
+          displayName: feature.properties.datetime.slice(0, 10),
+          id: sceneId
         };
-
-        renderFileList();
-        refreshSelects();
-        autoSelectBands(sceneId);
-
+        
+        updateSelects();
         document.getElementById('sec-loaded').style.display = '';
-        document.getElementById('sec-band').style.display   = '';
-        switchMode('ndvi');
-
-        S.map.fitBounds([[reprojBbox.south, reprojBbox.west],[reprojBbox.north, reprojBbox.east]]);
-        setStatus('✅ ' + displayName + ' 読込完了 (' + w + '×' + h + ' · EPSG:' + (epsg||'?') + ')', 'ok');
-
-      } catch(e) {
-        setStatus('エラー: ' + e.message, 'error');
-        console.error('[loadScene]', e);
-      }
+        document.getElementById('sec-band').style.display = '';
+        setStatus('✅ シーン読込完了', 'ok');
+      } catch(e) { setStatus('読込エラー: ' + e.message, 'error'); }
     }
 
-    async function pickOverview(tiff, targetPx) {
-      const n = await tiff.getImageCount();
-      let pick = null, pickW = Infinity;
-      for (let i = 0; i < n; i++) {
-        const img = await tiff.getImage(i);
-        const w = img.getWidth();
-        if (w >= targetPx && w < pickW) { pick = img; pickW = w; }
-      }
-      if (!pick) {
-        let maxW = 0;
-        for (let i = 0; i < n; i++) {
-          const img = await tiff.getImage(i);
-          const w = img.getWidth();
-          if (w > maxW) { maxW = w; pick = img; }
-        }
-      }
-      return pick;
-    }
+    function updateSelects() {
+      const list = document.getElementById('fileList');
+      list.innerHTML = Object.values(S.files).map(f => `
+        <li class="file-item"><div class="file-item-name">${f.displayName} (${f.id.slice(0,8)})</div></li>
+      `).join('');
 
-    function autoSelectBands(sceneId) {
-      for (const sel of [document.getElementById('redBand'), document.getElementById('nirBand'),
-                         document.getElementById('singleBand')]) {
-        for (const opt of sel.options) {
-          if (opt.value && opt.value.startsWith(sceneId)) { sel.value = opt.value; break; }
-        }
-      }
-      // NIR = 2番目のオプション
-      const nir = document.getElementById('nirBand');
-      const opts = Array.from(nir.options).filter(o => o.value && o.value.startsWith(sceneId));
-      if (opts.length >= 2) nir.value = opts[1].value;
-    }
-
-    // =====================================================
-    // EPSG 取得・変換 (元と同一)
-    // =====================================================
-    function getEPSG(img) {
-      const k = typeof img.getGeoKeys === 'function' ? img.getGeoKeys() : img.geoKeys;
-      if (!k) return null;
-      if (k.ProjectedCSTypeGeoKey && k.ProjectedCSTypeGeoKey !== 32767) return k.ProjectedCSTypeGeoKey;
-      if (k.GeographicTypeGeoKey  && k.GeographicTypeGeoKey  !== 32767) return k.GeographicTypeGeoKey;
-      if (k.GeogGeodeticDatumGeoKey === 6326) return 4326;
-      if (k.GeogGeodeticDatumGeoKey === 6612) return 4612;
-      if (k.GeogGeodeticDatumGeoKey === 1128) return 6668;
-      return null;
-    }
-
-    function toWGS84(bbox, epsg) {
-      const [w, s, e, n] = bbox;
-      const geo = new Set([4326, 4612, 6668, 4269, 4267]);
-      if (!epsg || geo.has(epsg)) {
-        return { west:Math.min(w,e), south:Math.min(s,n), east:Math.max(w,e), north:Math.max(s,n) };
-      }
-      const key = 'EPSG:' + epsg;
-      if (typeof proj4 === 'undefined' || !proj4.defs(key)) return { west:w, south:s, east:e, north:n };
-      try {
-        const corners = [
-          proj4(key,'EPSG:4326',[w,s]), proj4(key,'EPSG:4326',[e,s]),
-          proj4(key,'EPSG:4326',[w,n]), proj4(key,'EPSG:4326',[e,n])
-        ];
-        const lons = corners.map(c => c[0]), lats = corners.map(c => c[1]);
-        const r = { west:Math.min(...lons), south:Math.min(...lats), east:Math.max(...lons), north:Math.max(...lats) };
-        if (!isFinite(r.west)||r.west<-180||r.east>180||r.south<-90||r.north>90) return {west:w,south:s,east:e,north:n};
-        return r;
-      } catch(_) { return {west:w,south:s,east:e,north:n}; }
-    }
-
-    // =====================================================
-    // UI更新 (元と同一)
-    // =====================================================
-    function renderFileList() {
-      const ul = document.getElementById('fileList');
-      ul.innerHTML = '';
-      for (const name in S.files) {
-        const f = S.files[name];
-        const li = document.createElement('li');
-        li.className = 'file-item';
-        li.dataset.name = name;
-        const info = document.createElement('div');
-        info.className = 'file-item-info';
-        info.innerHTML =
-          '<div class="file-item-name">' + escHtml(f.displayName || name) + '</div>' +
-          '<div class="file-item-meta">' + f.width + '×' + f.height + ' · ' + f.bands + 'バンド' +
-          '<span class="epsg-badge">' + (f.epsg ? 'EPSG:'+f.epsg : '不明') + '</span></div>';
-        const btn = document.createElement('button');
-        btn.className = 'del-btn'; btn.textContent = '削除';
-        li.appendChild(info); li.appendChild(btn);
-        ul.appendChild(li);
-      }
-    }
-
-    function refreshSelects() {
       ['redBand','nirBand','singleBand'].forEach(id => {
         const sel = document.getElementById(id);
-        sel.innerHTML = '<option value="">-- 選択 --</option>';
-        for (const name in S.files) {
-          const f = S.files[name];
-          const base = f.displayName || shortName(name);
-          for (let b = 0; b < f.bands; b++) {
-            const label = base + ' — ' + (f.bandNames ? f.bandNames[b] : 'B'+(b+1));
-            sel.appendChild(new Option(label, name + '\x00' + b));
-          }
-        }
-        if (sel.options.length > 1) sel.selectedIndex = 1;
+        sel.innerHTML = '<option value="">選択してください</option>';
+        Object.values(S.files).forEach(f => {
+          sel.appendChild(new Option(`${f.displayName} - B04 (赤)`, `${f.id},0`));
+          sel.appendChild(new Option(`${f.displayName} - B08 (NIR)`, `${f.id},1`));
+        });
+        if(sel.options.length > 1) sel.selectedIndex = id === 'nirBand' ? 2 : 1;
       });
-      const nir = document.getElementById('nirBand');
-      if (nir.options.length > 2) nir.selectedIndex = 2;
     }
 
-    function parseBandVal(val) {
-      const i = val.lastIndexOf('\x00');
-      return [val.slice(0, i), parseInt(val.slice(i+1), 10)];
-    }
-
-    function switchMode(mode) {
-      S.mode = mode;
-      document.getElementById('tab-ndvi').classList.toggle('active',   mode === 'ndvi');
-      document.getElementById('tab-single').classList.toggle('active', mode === 'single');
-      document.getElementById('panel-ndvi').style.display   = mode === 'ndvi'   ? '' : 'none';
-      document.getElementById('panel-single').style.display = mode === 'single' ? '' : 'none';
-    }
-
-    // =====================================================
-    // 処理 (元と同一)
-    // =====================================================
-    async function computeNDVI() {
-      const rv = document.getElementById('redBand').value;
-      const nv = document.getElementById('nirBand').value;
-      if (!rv || !nv) { setStatus('バンドを選択してください', 'error'); return; }
-      setStatus('NDVI 計算中...', 'loading');
-      document.getElementById('computeBtn').disabled = true;
-      await tick();
-      try {
-        const [rFile, rIdx] = parseBandVal(rv);
-        const [nFile, nIdx] = parseBandVal(nv);
-        const red = S.files[rFile].data[rIdx];
-        const nir = S.files[nFile].data[nIdx];
-        const { width, height, reprojBbox, epsg } = S.files[rFile];
-
-        const ndvi = new Float32Array(width * height);
-        let sum=0, cnt=0, mn=Infinity, mx=-Infinity;
-        for (let i=0; i<red.length; i++) {
-          const r=red[i], n=nir[i];
+    function computeNDVI() {
+      const rv = document.getElementById('redBand').value.split(',');
+      const nv = document.getElementById('nirBand').value.split(',');
+      if(!rv[0] || !nv[0]) return;
+      
+      setStatus('NDVIを計算中...', 'loading');
+      const rFile = S.files[rv[0]], nFile = S.files[nv[0]];
+      const red = rFile.data[parseInt(rv[1])], nir = nFile.data[parseInt(nv[1])];
+      const w = rFile.width, h = rFile.height;
+      
+      const ndvi = new Float32Array(red.length);
+      let min=1, max=-1, sum=0;
+      for(let i=0; i<red.length; i++){
+        const r = red[i], n = nir[i];
         const v = (r + n === 0) ? 0 : (n - r) / (n + r);
-          ndvi[i]=v; sum+=v; cnt++;
-          if (v<mn) mn=v; if (v>mx) mx=v;
-        }
-
-        S.currentData   = ndvi;
-        S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
-        S.currentWidth  = width;
-        S.currentHeight = height;
-
-        showStats(mn, mx, sum/cnt, epsg);
-        renderOverlay(ndvi, width, height, reprojBbox, 'ndvi', mn, mx);
-        drawColorbar('ndvi', mn, mx, 'NDVI 値');
-        setStatus('✅ NDVI 計算完了', 'ok');
-      } catch(e) {
-        setStatus('エラー: ' + e.message, 'error');
-        console.error(e);
+        ndvi[i] = v;
+        if(v < min) min = v; if(v > max) max = v; sum += v;
       }
-      document.getElementById('computeBtn').disabled = false;
+      
+      S.currentData = ndvi;
+      S.currentWidth = w; S.currentHeight = h;
+      S.currentBbox = rFile.bbox;
+      
+      const epsg = rFile.epsg;
+      const [west, south, east, north] = rFile.bbox;
+      const bb = epsg ? toWgs84(west, south, east, north, epsg) : {west, south, east, north};
+      
+      drawOverlay(ndvi, w, h, bb, min, max);
+      showStats(min, max, sum/ndvi.length, epsg);
+      setStatus('✅ 演算完了', 'ok');
     }
 
-    async function displaySingle() {
-      const sv = document.getElementById('singleBand').value;
-      if (!sv) { setStatus('バンドを選択してください', 'error'); return; }
-      setStatus('描画中...', 'loading');
-      document.getElementById('displayBtn').disabled = true;
-      await tick();
-      try {
-        const [fname, bidx] = parseBandVal(sv);
-        const { data, width, height, reprojBbox, epsg } = S.files[fname];
-        const cmap = document.getElementById('colormap').value;
-        const band = data[bidx];
-        let mn=Infinity, mx=-Infinity, sum=0, cnt=0;
-        for (let i=0; i<band.length; i++) {
-          const v=band[i];
-          if (isFinite(v)) { if (v<mn) mn=v; if (v>mx) mx=v; sum+=v; cnt++; }
-        }
-        if (!isFinite(mn)) { mn = 0; mx = 1; }
-        const mean = cnt > 0 ? sum / cnt : 0;
-        S.currentData   = band;
-        S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
-        S.currentWidth  = width;
-        S.currentHeight = height;
-        showStats(mn, mx, mean, epsg);
-        renderOverlay(band, width, height, reprojBbox, cmap, mn, mx);
-        drawColorbar(cmap, mn, mx, cmap==='ndvi'?'NDVI 値':'値');
-        setStatus('✅ 表示完了', 'ok');
-      } catch(e) {
-        setStatus('エラー: ' + e.message, 'error');
-      }
-      document.getElementById('displayBtn').disabled = false;
-    }
-
-    // =====================================================
-    // 描画・可視化 (元と同一)
-    // =====================================================
-    function renderOverlay(data, w, h, bb, cmap, mn, mx) {
-      if (S.layer) { S.map.removeLayer(S.layer); S.layer = null; }
+    function drawOverlay(data, w, h, bb, mn, mx) {
+      if(S.layer) S.map.removeLayer(S.layer);
       const canvas = document.createElement('canvas');
-      canvas.width=w; canvas.height=h;
-      const ctx = canvas.getContext('2d');
-      const img = ctx.createImageData(w, h);
-      const px  = img.data;
-      const range = (mx-mn)||1;
-      for (let i=0; i<data.length; i++) {
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d'), img = ctx.createImageData(w, h), px = img.data;
+      for(let i=0; i<data.length; i++){
         const v = data[i];
-        const t = Math.max(0, Math.min(1, (v-mn)/range));
-        const [r,g,b] = applyColormap(cmap, t, v);
+        const [r,g,b] = getNdviColor(v);
         px[i*4]=r; px[i*4+1]=g; px[i*4+2]=b; px[i*4+3]=220;
       }
       ctx.putImageData(img, 0, 0);
-      const bounds = [[bb.south, bb.west],[bb.north, bb.east]];
-      S.layer = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: S.opacity }).addTo(S.map);
-      S.map.fitBounds(bounds);
-    }
-
-    function applyColormap(name, t, raw) {
-      switch(name) {
-        case 'ndvi':
-          if (raw < -0.2) return [100,100,100];
-          if (raw < 0)    return [150,150,255];
-          if (raw < 0.2)  return [190,170,120];
-          if (raw < 0.4)  return [255,255,180];
-          if (raw < 0.6)  return [144,238,144];
-          if (raw < 0.8)  return [50,205,50];
-          return [0,100,0];
-        case 'gray': { const g=Math.round(t*255); return [g,g,g]; }
-        case 'hot':
-          if (t<0.33) { const s=t/0.33;       return [Math.round(s*255),0,0]; }
-          if (t<0.66) { const s=(t-.33)/.33;   return [255,Math.round(s*255),0]; }
-          { const s=(t-.66)/.34; return [255,255,Math.round(s*255)]; }
-        case 'blue': return [20,Math.round(t*150+50),Math.round(t*205+50)];
-        case 'spectral':
-          if (t<.25) { const s=t/.25;       return [0,Math.round(s*255),255]; }
-          if (t<.5)  { const s=(t-.25)/.25; return [0,255,Math.round((1-s)*255)]; }
-          if (t<.75) { const s=(t-.5)/.25;  return [Math.round(s*255),255,0]; }
-          { const s=(t-.75)/.25; return [255,Math.round((1-s)*255),0]; }
-        default: return [128,128,128];
-      }
-    }
-
-    function drawColorbar(cmap, mn, mx, title) {
+      S.layer = L.imageOverlay(canvas.toDataURL(), [[bb.south, bb.west], [bb.north, bb.east]], {opacity: S.opacity}).addTo(S.map);
       document.getElementById('map-legend').style.display = '';
-      document.getElementById('leg-title').textContent = title;
-      const canvas = document.getElementById('leg-canvas');
-      canvas.width = 200;
-      const ctx = canvas.getContext('2d');
-      for (let x=0; x<200; x++) {
-        const t=x/199;
-        const [r,g,b]=applyColormap(cmap, t, mn+t*(mx-mn));
-        ctx.fillStyle='rgb('+r+','+g+','+b+')';
-        ctx.fillRect(x,0,1,12);
-      }
-      document.getElementById('l-min').textContent = mn.toFixed(2);
-      document.getElementById('l-mid').textContent = ((mn+mx)/2).toFixed(2);
-      document.getElementById('l-max').textContent = mx.toFixed(2);
+    }
+
+    function getNdviColor(v) {
+      if(v < -0.1) return [150,150,255]; // 水域
+      if(v < 0.2) return [190,170,120];  // 裸地
+      if(v < 0.4) return [255,255,180];  // 低植生
+      if(v < 0.7) return [144,238,144];  // 森林
+      return [0,100,0];                  // 高植生
+    }
+
+    function toWgs84(w, s, e, n, epsg) {
+      if([4326, 4612, 6668].includes(epsg)) return {west:w, south:s, east:e, north:n};
+      try {
+        const sw = proj4('EPSG:'+epsg, 'EPSG:4326', [w,s]);
+        const ne = proj4('EPSG:'+epsg, 'EPSG:4326', [e,n]);
+        return {west:sw[0], south:sw[1], east:ne[0], north:ne[1]};
+      } catch(err){ return {west:w, south:s, east:e, north:n}; }
     }
 
     function showStats(mn, mx, mean, epsg) {
-      document.getElementById('vMin').textContent  = isFinite(mn)   ? mn.toFixed(4)   : '—';
-      document.getElementById('vMax').textContent  = isFinite(mx)   ? mx.toFixed(4)   : '—';
-      document.getElementById('vMean').textContent = isFinite(mean) ? mean.toFixed(4) : '—';
-      document.getElementById('vEPSG').textContent = epsg ? 'EPSG:'+epsg : '不明';
+      document.getElementById('vMin').textContent = mn.toFixed(3);
+      document.getElementById('vMax').textContent = mx.toFixed(3);
+      document.getElementById('vMean').textContent = mean.toFixed(3);
+      document.getElementById('vEPSG').textContent = epsg ? 'EPSG:'+epsg : 'Unknown';
       document.getElementById('sec-stats').style.display = '';
     }
 
-    // =====================================================
-    // ヒストグラム (元と同一)
-    // =====================================================
     function computeHistogram(layer) {
-      if (!S.currentData || !S.currentBbox) return;
       const bounds = layer.getBounds();
-      const W=S.currentWidth, H=S.currentHeight;
-      const [west,south,east,north] = S.currentBbox;
-      const dx=(east-west)/W, dy=(north-south)/H;
+      const [w0, s0, e0, n0] = S.currentBbox;
+      const dx=(e0-w0)/S.currentWidth, dy=(n0-s0)/S.currentHeight;
       const vals = [];
-      for (let y=0; y<H; y++) {
-        const lat = north-y*dy;
-        if (lat<bounds.getSouth()||lat>bounds.getNorth()) continue;
-        for (let x=0; x<W; x++) {
-          const lng = west+x*dx;
-          if (lng<bounds.getWest()||lng>bounds.getEast()) continue;
-          const v = S.currentData[y*W+x];
-          if (isFinite(v)) vals.push(v);
+      for(let y=0; y<S.currentHeight; y++){
+        const lat = n0 - y*dy;
+        if(lat < bounds.getSouth() || lat > bounds.getNorth()) continue;
+        for(let x=0; x<S.currentWidth; x++){
+          const lng = w0 + x*dx;
+          if(lng < bounds.getWest() || lng > bounds.getEast()) continue;
+          vals.push(S.currentData[y*S.currentWidth + x]);
         }
       }
-      if (!vals.length) { setStatus('選択範囲内にデータがありません', 'error'); return; }
-      const bins=20;
-      let min=Math.min(...vals), max=Math.max(...vals);
-      if (min===max) { min-=0.1; max+=0.1; }
-      const step=(max-min)/bins;
-      const counts=new Array(bins).fill(0);
-      for (const v of vals) {
-        let b=Math.floor((v-min)/step);
-        if (b>=bins) b=bins-1; if (b<0) b=0;
-        counts[b]++;
-      }
-      const labels=Array.from({length:bins},(_,i)=>(min+(i+0.5)*step).toFixed(2));
+      if(!vals.length) return;
+      const bins=20, counts=new Array(bins).fill(0);
+      const min=Math.min(...vals), max=Math.max(...vals), step=(max-min)/bins;
+      vals.forEach(v => { let b=Math.floor((v-min)/step); counts[Math.min(b,bins-1)]++; });
+      
       document.getElementById('chart-wrap').style.display = '';
-      if (tsChart) tsChart.destroy();
-      tsChart = new Chart(document.getElementById('hist-chart').getContext('2d'),{
-        type:'bar',
-        data:{ labels, datasets:[{ label:'ピクセル数', data:counts, backgroundColor:'#059669' }] },
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{display:true},y:{display:true}} }
+      if(tsChart) tsChart.destroy();
+      tsChart = new Chart(document.getElementById('hist-chart'), {
+        type:'bar', data:{ labels: counts.map((_,i)=>(min+i*step).toFixed(2)), datasets:[{data:counts, backgroundColor:'#059669'}] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
       });
-      setStatus('範囲内のピクセル数: '+vals.length+' ('+min.toFixed(2)+' 〜 '+max.toFixed(2)+')', 'ok');
     }
 
-    // =====================================================
-    // ユーティリティ (元と同一)
-    // =====================================================
     function setStatus(msg, type) {
       const el = document.getElementById('status');
-      el.textContent = msg;
-      el.className = 'status ' + (type||'');
+      el.textContent = msg; el.className = 'status ' + type;
     }
-    function shortName(p) { return p.split(/[/\\]/).pop(); }
-    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-    function tick() { return new Promise(r => setTimeout(r, 20)); }
+    function switchTab(m) {
+      document.getElementById('tab-ndvi').className = m==='ndvi'?'tab active':'tab';
+      document.getElementById('tab-single').className = m==='single'?'tab active':'tab';
+      document.getElementById('panel-ndvi').style.display = m==='ndvi'?'':'none';
+      document.getElementById('panel-single').style.display = m==='single'?'':'none';
+    }
   </script>
 </body>
 </html>
