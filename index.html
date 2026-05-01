@@ -3,26 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel-2 COG NDVI Viewer</title>
-    <!-- 外部ライブラリの読み込み -->
+    <title>Sentinel-2 NDVI Viewer (Standalone)</title>
+    <!-- CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;900&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        #map { height: 600px; width: 100%; border-radius: 12px; z-index: 1; outline: none; }
+        #map { height: 600px; width: 100%; border-radius: 12px; z-index: 1; }
         .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        /* 拡大時にボケないようにする設定 */
-        .leaflet-image-layer { image-rendering: crisp-edges; image-rendering: pixelated; }
     </style>
 </head>
 <body class="text-slate-900 min-h-screen p-4 md:p-8">
     <div id="root"></div>
 
-    <!-- React, Leaflet, GeoTIFF, proj4 読み込み -->
+    <!-- Scripts -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
@@ -45,6 +43,7 @@
             useEffect(() => {
                 if (!mapRef.current) {
                     const map = L.map('map').setView([35.367, 132.755], 11);
+                    // OpenStreetMap, but cleaner layout
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         attribution: '&copy; OpenStreetMap'
                     }).addTo(map);
@@ -93,13 +92,12 @@
             };
 
             const loadScene = async (feature) => {
-                setStatus({ msg: 'COGを解析中... (解像度: 1500px)', type: 'loading' });
+                setStatus({ msg: 'COGを解析中... (解像度調整中)', type: 'loading' });
                 try {
                     const assets = feature.assets;
                     const b04 = assets.red || assets.B04 || assets.b04;
                     const b08 = assets.nir || assets.B08 || assets.b08;
 
-                    // S3 URLをHTTPSに変換
                     const toHttps = (href) => href.startsWith('s3://') 
                         ? href.replace(/^s3:\/\/([^/]+)\/(.+)$/, 'https://$1.s3.us-west-2.amazonaws.com/$2') 
                         : href;
@@ -107,10 +105,10 @@
                     const tiff04 = await GeoTIFF.fromUrl(toHttps(b04.href));
                     const tiff08 = await GeoTIFF.fromUrl(toHttps(b08.href));
 
-                    // メタデータ取得用 (オーバービューではなく元画像から)
+                    // Get base metadata to avoid "Affine transformation" errors on overviews
                     const img04Base = await tiff04.getImage(0);
                     
-                    // 鮮明度を上げるため1500pxに近いオーバービューを検索
+                    // Resolution selection logic: find an overview close to 1500px for clarity
                     const getBestOverview = async (tiff, target) => {
                         const count = await tiff.getImageCount();
                         let best = await tiff.getImage(0);
@@ -154,9 +152,11 @@
                     const bbox = img04Base.getBoundingBox();
                     const epsg = img04Base.geoKeys.ProjectedCSTypeGeoKey || img04Base.geoKeys.GeographicTypeGeoKey;
                     
-                    const epsgKey = "EPSG:" + epsg;
+                    // Fallback to UTM zones if EPSG is typical sentinel
+                    const epsgKey = `EPSG:${epsg}`;
                     if (!proj4.defs(epsgKey)) {
-                        proj4.defs(epsgKey, "+proj=utm +zone=" + (epsg % 100) + " +datum=WGS84 +units=m +no_defs");
+                        // Very basic UTM guess for Sentinel-2 (often 326xx)
+                        proj4.defs(epsgKey, `+proj=utm +zone=${epsg % 100} +datum=WGS84 +units=m +no_defs`);
                     }
 
                     const sw = proj4(epsgKey, 'EPSG:4326', [bbox[0], bbox[1]]);
@@ -164,12 +164,12 @@
                     
                     renderLayer(ndvi, w, h, { west: sw[0], south: sw[1], east: ne[0], north: ne[1] }, minVal, maxVal);
                     
-                    setStatus({ msg: '✓ ' + feature.id.slice(0,10) + ' 読込完了', type: 'ok' });
+                    setStatus({ msg: `✓ ${feature.id.slice(0,10)} 読込完了`, type: 'ok' });
                     footprintsRef.current.clearLayers();
                     mapRef.current.fitBounds([[sw[1], sw[0]], [ne[1], ne[0]]]);
                 } catch (e) {
                     console.error(e);
-                    setStatus({ msg: '読込エラー: ' + e.message, type: 'error' });
+                    setStatus({ msg: `読込エラー: ${e.message}`, type: 'error' });
                 }
             };
 
@@ -210,11 +210,10 @@
                             <h1 className="text-3xl font-black text-emerald-900 tracking-tight">Sentinel-2 COG NDVI</h1>
                             <p className="text-sm text-slate-500 font-mono">High-Resolution Vegetation Index Viewer</p>
                         </div>
-                        <div className={
-                            "px-5 py-2.5 rounded-xl border-2 text-sm font-bold shadow-sm transition-all " + 
-                            (status.type === 'loading' ? 'bg-amber-50 border-amber-200 text-amber-700 animate-pulse' : 
-                             status.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700')
-                        }>
+                        <div className={`px-5 py-2.5 rounded-xl border-2 text-sm font-bold shadow-sm transition-all ${
+                            status.type === 'loading' ? 'bg-amber-50 border-amber-200 text-amber-700 animate-pulse' : 
+                            status.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        }`}>
                             {status.msg}
                         </div>
                     </header>
