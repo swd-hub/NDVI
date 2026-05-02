@@ -112,10 +112,6 @@
     .file-item-info { flex: 1; min-width: 0; }
     .file-item-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .file-item-meta { font-size: 0.65rem; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
-    .del-btn {
-      background: var(--red); color: #fff; border: none; border-radius: 3px;
-      padding: 3px 8px; font-size: 0.65rem; cursor: pointer; font-weight: 700;
-    }
 
     .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
     .tab {
@@ -303,7 +299,7 @@
       <div class="map-legend" id="map-legend" style="display:none">
         <div class="leg-title" id="leg-title">NDVI</div>
         <canvas id="leg-canvas" height="12" style="width:100%; border-radius:4px; margin-bottom:4px;"></canvas>
-        <div class="leg-labels"><span id="l-min">-0.2</span><span id="l-mid">0.4</span><span id="l-max">1.0</span></div>
+        <div class="leg-labels"><span id="l-min">-1.0</span><span id="l-mid">0.0</span><span id="l-max">1.0</span></div>
       </div>
       <div class="map-info-bar">
         <span>データ: <span class="cl">Sentinel-2 10m (Element84 API)</span></span>
@@ -336,7 +332,8 @@
       map: null,
       opacity: 0.80,
       currentData: null,
-      currentBbox: null,
+      currentBbox: null,      // ピクセル座標/元CRSのBbox
+      currentBboxWgs84: null, // 地図表示用のWGS84のBbox
       currentWidth: 0,
       currentHeight: 0,
       drawnItems: null,
@@ -434,7 +431,10 @@
       });
       document.getElementById('tab-ndvi').addEventListener('click', () => switchTab('ndvi'));
       document.getElementById('tab-single').addEventListener('click', () => switchTab('single'));
+      
       document.getElementById('computeBtn').addEventListener('click', computeNDVI);
+      document.getElementById('displayBtn').addEventListener('click', drawSingleBand); // 追加：単バンド描画処理
+
       document.getElementById('opacity').addEventListener('input', function() {
         S.opacity = this.value / 100;
         document.getElementById('opacityLabel').textContent = this.value + '%';
@@ -547,6 +547,35 @@
       });
     }
 
+    /* === 追加：滑らかなNDVIグラデーションの設定 === */
+    const NDVI_STOPS = [
+      { v: -1.0, c: [0, 0, 180] },      // 水域 (青)
+      { v:  0.0, c: [240, 240, 240] },  // 雲・雪・背景 (白/薄灰)
+      { v:  0.1, c: [204, 153, 102] },  // 裸地 (茶)
+      { v:  0.3, c: [204, 224, 102] },  // 低植生 (黄緑)
+      { v:  0.6, c: [51,  153, 51] },   // 植生 (緑)
+      { v:  1.0, c: [0,   77,  0] }     // 森林 (濃緑)
+    ];
+
+    function getNdviColor(v) {
+      if(v === -999 || isNaN(v)) return [0, 0, 0, 0]; // NODATAは透過させる
+      if(v <= NDVI_STOPS[0].v) return [...NDVI_STOPS[0].c, 255];
+      if(v >= NDVI_STOPS[NDVI_STOPS.length-1].v) return [...NDVI_STOPS[NDVI_STOPS.length-1].c, 255];
+      
+      // 線形補間
+      for(let i=0; i<NDVI_STOPS.length-1; i++){
+        const s1 = NDVI_STOPS[i], s2 = NDVI_STOPS[i+1];
+        if(v >= s1.v && v <= s2.v){
+          const t = (v - s1.v) / (s2.v - s1.v);
+          const r = Math.round(s1.c[0] + t*(s2.c[0]-s1.c[0]));
+          const g = Math.round(s1.c[1] + t*(s2.c[1]-s1.c[1]));
+          const b = Math.round(s1.c[2] + t*(s2.c[2]-s1.c[2]));
+          return [r, g, b, 255];
+        }
+      }
+      return [0, 0, 0, 0];
+    }
+
     function computeNDVI() {
       const rv = document.getElementById('redBand').value.split(',');
       const nv = document.getElementById('nirBand').value.split(',');
@@ -558,12 +587,20 @@
       const w = rFile.width, h = rFile.height;
       
       const ndvi = new Float32Array(red.length);
-      let min=1, max=-1, sum=0;
+      let min=1, max=-1, sum=0, validCount=0;
+      
       for(let i=0; i<red.length; i++){
         const r = red[i], n = nir[i];
-        const v = (r + n === 0) ? 0 : (n - r) / (n + r);
+        if (r === 0 && n === 0) {
+          ndvi[i] = -999; // NODATA
+          continue;
+        }
+        const v = (n - r) / (n + r);
         ndvi[i] = v;
-        if(v < min) min = v; if(v > max) max = v; sum += v;
+        if(v < min) min = v; 
+        if(v > max) max = v; 
+        sum += v;
+        validCount++;
       }
       
       S.currentData = ndvi;
@@ -573,33 +610,94 @@
       const epsg = rFile.epsg;
       const [west, south, east, north] = rFile.bbox;
       const bb = epsg ? toWgs84(west, south, east, north, epsg) : {west, south, east, north};
+      S.currentBboxWgs84 = bb; // ヒストグラム用に正しい領域を保持
       
-      drawOverlay(ndvi, w, h, bb, min, max);
-      showStats(min, max, sum/ndvi.length, epsg);
+      drawOverlay(ndvi, w, h, bb);
+      drawLegendCanvas(); // 凡例の描画を追加
+      
+      const mean = validCount > 0 ? sum / validCount : 0;
+      showStats(min, max, mean, epsg);
       setStatus('✅ 演算完了', 'ok');
     }
 
-    function drawOverlay(data, w, h, bb, mn, mx) {
+    function drawOverlay(data, w, h, bb) {
       if(S.layer) S.map.removeLayer(S.layer);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d'), img = ctx.createImageData(w, h), px = img.data;
+      
+      for(let i=0; i<data.length; i++){
+        const v = data[i];
+        const [r, g, b, a] = getNdviColor(v);
+        px[i*4] = r; 
+        px[i*4+1] = g; 
+        px[i*4+2] = b; 
+        px[i*4+3] = a; // 計算したアルファ値を適用
+      }
+      ctx.putImageData(img, 0, 0);
+      S.layer = L.imageOverlay(canvas.toDataURL(), [[bb.south, bb.west], [bb.north, bb.east]], {opacity: S.opacity}).addTo(S.map);
+    }
+
+    /* === 追加：凡例キャンバスの描画処理 === */
+    function drawLegendCanvas() {
+      const canvas = document.getElementById('leg-canvas');
+      const ctx = canvas.getContext('2d');
+      // 解像度固定、CSSによって100%に引き延ばされる
+      canvas.width = 200; 
+      canvas.height = 12;
+      
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      NDVI_STOPS.forEach(s => {
+        const offset = (s.v + 1.0) / 2.0; // -1.0〜1.0 を 0.0〜1.0 にマッピング
+        grad.addColorStop(offset, `rgb(${s.c[0]},${s.c[1]},${s.c[2]})`);
+      });
+      
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      document.getElementById('l-min').textContent = '-1.0';
+      document.getElementById('l-mid').textContent = '0.0';
+      document.getElementById('l-max').textContent = '1.0';
+      document.getElementById('map-legend').style.display = '';
+    }
+
+    /* === 追加：未実装だった単バンド表示機能 === */
+    function drawSingleBand() {
+      const sv = document.getElementById('singleBand').value.split(',');
+      if(!sv[0]) return;
+      
+      setStatus('単バンドを描画中...', 'loading');
+      const file = S.files[sv[0]];
+      const data = file.data[parseInt(sv[1])];
+      const w = file.width, h = file.height;
+      
+      let max = 0;
+      for(let i=0; i<data.length; i++) {
+        if(data[i] > max) max = data[i];
+      }
+      max = Math.min(max, 4000); // 視認性向上のための簡易的なクリップ
+      
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d'), img = ctx.createImageData(w, h), px = img.data;
       for(let i=0; i<data.length; i++){
         const v = data[i];
-        const [r,g,b] = getNdviColor(v);
-        px[i*4]=r; px[i*4+1]=g; px[i*4+2]=b; px[i*4+3]=220;
+        if(v === 0) { px[i*4+3] = 0; continue; } // NODATAを透過
+        let val = Math.floor((v / max) * 255);
+        if(val > 255) val = 255;
+        px[i*4] = val; px[i*4+1] = val; px[i*4+2] = val; px[i*4+3] = 255;
       }
       ctx.putImageData(img, 0, 0);
+      
+      const epsg = file.epsg;
+      const [west, south, east, north] = file.bbox;
+      const bb = epsg ? toWgs84(west, south, east, north, epsg) : {west, south, east, north};
+      
+      if(S.layer) S.map.removeLayer(S.layer);
       S.layer = L.imageOverlay(canvas.toDataURL(), [[bb.south, bb.west], [bb.north, bb.east]], {opacity: S.opacity}).addTo(S.map);
-      document.getElementById('map-legend').style.display = '';
-    }
-
-    function getNdviColor(v) {
-      if(v < -0.1) return [150,150,255]; // 水域
-      if(v < 0.2) return [190,170,120];  // 裸地
-      if(v < 0.4) return [255,255,180];  // 低植生
-      if(v < 0.7) return [144,238,144];  // 森林
-      return [0,100,0];                  // 高植生
+      
+      document.getElementById('map-legend').style.display = 'none'; // 単バンド時は凡例非表示
+      setStatus('✅ 単バンド描画完了', 'ok');
     }
 
     function toWgs84(w, s, e, n, epsg) {
@@ -619,24 +717,38 @@
       document.getElementById('sec-stats').style.display = '';
     }
 
+    /* === 修正：座標系を揃え、正しくヒストグラムを計算する === */
     function computeHistogram(layer) {
+      if(!S.currentData || !S.currentBboxWgs84) return;
       const bounds = layer.getBounds();
-      const [w0, s0, e0, n0] = S.currentBbox;
-      const dx=(e0-w0)/S.currentWidth, dy=(n0-s0)/S.currentHeight;
+      const bb = S.currentBboxWgs84; // 修正：WGS84に変換済みのBboxを使用する
+      const dx = (bb.east - bb.west) / S.currentWidth;
+      const dy = (bb.north - bb.south) / S.currentHeight;
+      
       const vals = [];
       for(let y=0; y<S.currentHeight; y++){
-        const lat = n0 - y*dy;
+        const lat = bb.north - y*dy;
         if(lat < bounds.getSouth() || lat > bounds.getNorth()) continue;
         for(let x=0; x<S.currentWidth; x++){
-          const lng = w0 + x*dx;
+          const lng = bb.west + x*dx;
           if(lng < bounds.getWest() || lng > bounds.getEast()) continue;
-          vals.push(S.currentData[y*S.currentWidth + x]);
+          
+          const v = S.currentData[y*S.currentWidth + x];
+          if(v !== -999) vals.push(v); // Nodatasを除外
         }
       }
-      if(!vals.length) return;
+      
+      if(!vals.length) {
+         setStatus('選択領域内に有効なデータがありません', 'error');
+         return;
+      }
+      
       const bins=20, counts=new Array(bins).fill(0);
       const min=Math.min(...vals), max=Math.max(...vals), step=(max-min)/bins;
-      vals.forEach(v => { let b=Math.floor((v-min)/step); counts[Math.min(b,bins-1)]++; });
+      vals.forEach(v => { 
+        let b = Math.floor((v-min)/step); 
+        counts[Math.min(b,bins-1)]++; 
+      });
       
       document.getElementById('chart-wrap').style.display = '';
       if(tsChart) tsChart.destroy();
@@ -650,6 +762,7 @@
       const el = document.getElementById('status');
       el.textContent = msg; el.className = 'status ' + type;
     }
+    
     function switchTab(m) {
       document.getElementById('tab-ndvi').className = m==='ndvi'?'tab active':'tab';
       document.getElementById('tab-single').className = m==='single'?'tab active':'tab';
