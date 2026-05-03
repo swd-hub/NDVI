@@ -531,6 +531,56 @@ async function geePost(endpoint, body) {
   return data;
 }
 
+// ========================================
+// ResolutionManager.js (新規作成を推奨)
+// このモジュールが「どのデータソースで」「どれだけの解像度が必要か」を管理する
+// ========================================
+
+/**
+ * @param {number} zoomLevel - 現在のマップズームレベル (例: 10)
+ * @returns {string} - 要求される解像度を表すパスまたはパラメータ（例: 'res_high'）
+ */
+function calculateRequiredResolution(zoomLevel, source = 'modis') {
+    // 例: Zoom Levelが小さいほど、要求するピクセル値の最小値を大きくする
+    if (zoomLevel > 12) {
+        return '高解像度（Original Scale）'; 
+    } else if (zoomLevel >= 8 && zoomLevel <= 12) {
+        return '中解像度（Resampled Scale A）'; // ★ここがキーロジック
+    } else {
+        return '低解像度（Overview Scale B）';
+    }
+}
+
+/**
+ * 地図を再描画するメイン関数。この中で全てのエラーチェックとリサイズ処理を行う。
+ * @param {string} source - 現在のデータソース ('modis', 'sentinel')
+ */
+function updateResolutionAndRenderMap(source) {
+    // 1. 現行マップの状態からズームレベルを取得する
+    const currentZoom = mapInstance.getZoom(); // 例: LeafletやOpenLayersのインスタンス変数を使用
+
+    // 2. 要求される解像度を計算し、パスまたはパラメータを得る
+    const requiredResolution = calculateRequiredResolution(currentZoom, source);
+
+    console.log(`[Render] 現在のズームレベルに基づく要求解像度: ${requiredResolution}`);
+
+    // 3. データローダーに「この解像度のデータ」を読み込ませる命令を出す
+    loadTileLayer(source, requiredResolution); // ★これが画像のロード関数となる
+
+    // 4. UIの状態も更新する (既存のCitation 3のような処理)
+    updateUIStatus(source, requiredResolution); 
+}
+
+// ========================================
+// [修正点]: Citation 3 の selectDataSource から呼び出すように変更
+// ========================================
+
+/* 
+function selectDataSource(source, el) {
+  // ... (既存のステータス更新ロジック) ...
+
+  // ★ データの切り替えが終わったら、必ずこの関数
+
 // ── EE Expression ビルダー ──
 
 /** NDVI タイル可視化用 */
