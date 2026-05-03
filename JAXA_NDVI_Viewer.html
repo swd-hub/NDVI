@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NDVI Viewer — JAXA GCOM-C</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://data.earth.jaxa.jp/api/javascript/v2.0.0/jaxa.earth.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Mono:wght@300;400&display=swap');
+    :root{--bg:#0d1117;--panel:#161b22;--border:#21262d;--accent:#39d353;--accent2:#f0b429;--text:#e6edf3;--text-dim:#7d8590;--danger:#f85149;--panel-w:300px;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+    header{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+    .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;letter-spacing:.05em;color:var(--accent);}
+    .subtitle{font-size:11px;color:var(--text-dim);}
+    .badge{margin-left:auto;font-size:10px;background:#1f2d1f;color:var(--accent);border:1px solid #2ea043;border-radius:20px;padding:2px 10px;}
+    .main{display:flex;flex:1;overflow:hidden;}
+    .panel{width:var(--panel-w);background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;}
+    .section{padding:14px 14px 10px;border-bottom:1px solid var(--border);}
+    .section-title{font-family:'Syne',sans-serif;font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px;}
+    label{display:block;font-size:10px;color:var(--text-dim);margin-bottom:4px;}
+    input[type="text"],input[type="number"],select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:6px 8px;border-radius:4px;outline:none;transition:border-color .15s;}
+    input:focus,select:focus{border-color:var(--accent);}
+    .bbox-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;}
+    .date-display{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent);text-align:center;margin-bottom:8px;}
+    input[type="range"]{width:100%;accent-color:var(--accent);cursor:pointer;}
+    .date-range-label{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:4px;}
+    .opacity-row{display:flex;align-items:center;gap:8px;}
+    .opacity-row input{flex:1;}
+    .opacity-val{font-size:11px;color:var(--accent2);min-width:32px;text-align:right;}
+    .colorbar-ndvi{height:12px;border-radius:3px;background:linear-gradient(to right,#8B4513,#D2B48C,#F5F5DC,#90EE90,#32CD32,#006400);margin-bottom:4px;}
+    .colorbar-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);}
+    .btn{width:100%;padding:8px;border:none;border-radius:4px;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;letter-spacing:.06em;cursor:pointer;transition:all .15s;}
+    .btn-primary{background:var(--accent);color:#0d1117;}
+    .btn-primary:hover{background:#52e36a;}
+    .btn-primary:disabled{background:#2ea04380;color:#555;cursor:not-allowed;}
+    .btn-secondary{background:var(--border);color:var(--text);margin-top:6px;}
+    .btn-secondary:hover{background:#30363d;}
+    .drop-zone{border:1px dashed var(--border);border-radius:4px;padding:10px;text-align:center;font-size:10px;color:var(--text-dim);cursor:pointer;transition:border-color .15s,background .15s;}
+    .drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:#1f2d1f40;color:var(--accent);}
+    .geojson-name{font-size:10px;color:var(--accent2);margin-top:6px;word-break:break-all;}
+    #status{font-size:10px;padding:8px 14px;border-top:1px solid var(--border);color:var(--text-dim);min-height:32px;display:flex;align-items:center;gap:6px;}
+    #status.loading{color:var(--accent2);}
+    #status.error{color:var(--danger);}
+    #status.ok{color:var(--accent);}
+    .spinner{width:10px;height:10px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .leaflet-container{background:#0d1117!important;}
+    .leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--border)!important;}
+    .leaflet-control-attribution{background:rgba(13,17,23,.8)!important;color:var(--text-dim)!important;font-size:9px!important;}
+    .leaflet-popup-content-wrapper{background:var(--panel)!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:6px!important;font-size:12px!important;box-shadow:0 4px 20px rgba(0,0,0,.5)!important;}
+    .leaflet-popup-tip{background:var(--panel)!important;}
+    .leaflet-popup-close-button{color:var(--text-dim)!important;}
+    .popup-ndvi-val{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent);}
+    .popup-label{font-size:10px;color:var(--text-dim);margin-bottom:2px;}
+    .tile-btn-group{display:flex;gap:4px;flex-wrap:wrap;}
+    .tile-btn{flex:1;padding:5px 4px;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);border-radius:3px;cursor:pointer;text-align:center;transition:all .15s;}
+    .tile-btn.active{border-color:var(--accent);color:var(--accent);background:#1f2d1f40;}
+    #geojsonInput{display:none;}
+    #chartPanel{position:fixed;bottom:-340px;left:var(--panel-w);right:0;height:340px;background:var(--panel);border-top:1px solid var(--border);z-index:900;transition:bottom .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;}
+    #chartPanel.open{bottom:0;}
+    .chart-header{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);gap:10px;flex-shrink:0;}
+    .chart-title{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text);flex:1;}
+    .chart-coord{font-size:10px;color:var(--text-dim);}
+    .chart-year-filter{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-dim);}
+    .chart-year-filter select{width:auto;padding:3px 6px;font-size:10px;}
+    .chart-close{background:none;border:none;color:var(--text-dim);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:3px;}
+    .chart-close:hover{background:var(--border);color:var(--text);}
+    .chart-body{flex:1;padding:10px 14px;position:relative;min-height:0;}
+    .chart-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:11px;color:var(--text-dim);}
+    .chart-loading .spinner{width:20px;height:20px;border-width:3px;color:var(--accent);}
+    .chart-legend{display:flex;gap:14px;font-size:9px;color:var(--text-dim);padding:0 14px 6px;flex-shrink:0;}
+    .legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px;}
+    #chartToggleBtn{position:absolute;bottom:16px;right:16px;z-index:800;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:'Syne',sans-serif;font-size:11px;font-weight:600;padding:8px 14px;border-radius:20px;cursor:pointer;transition:all .15s;box-shadow:0 2px 12px rgba(0,0,0,.4);}
+    #chartToggleBtn:hover,#chartToggleBtn.active{border-color:var(--accent);color:var(--accent);background:#1f2d1f;}
+  </style>
+</head>
+<body>
+<header>
+  <div><div class="logo">NDVI VIEWER</div><div class="subtitle">JAXA GCOM-C / SGLI · 月次 · 約5km</div></div>
+  <div class="badge">JAXA Earth API v2</div>
+</header>
+<div class="main">
+  <div class="panel">
+    <div class="section">
+      <div class="section-title">観測月</div>
+      <div class="date-display" id="dateDisplay">---- / --</div>
+      <input type="range" id="dateSlider" min="0" max="0" value="0">
+      <div class="date-range-label"><span id="dateMin">--</span><span id="dateMax">--</span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">対象範囲 (bbox)</div>
+      <label>プリセット</label>
+      <select id="bboxPreset">
+        <option value="custom">カスタム</option>
+        <option value="izumo">出雲市</option>
+        <option value="matsue">松江市</option>
+        <option value="shimane">島根県全体</option>
+        <option value="chugoku">中国地方</option>
+      </select>
+      <div class="bbox-grid">
+        <div><label>西</label><input type="number" id="bboxW" value="132.5" step="0.01"></div>
+        <div><label>東</label><input type="number" id="bboxE" value="133.1" step="0.01"></div>
+        <div><label>南</label><input type="number" id="bboxS" value="35.2" step="0.01"></div>
+        <div><label>北</label><input type="number" id="bboxN" value="35.5" step="0.01"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">NDVI表示</div>
+      <div class="colorbar-ndvi"></div>
+      <div class="colorbar-labels"><span>-0.2 (裸地/水)</span><span>0.9 (濃植生)</span></div>
+      <div style="margin-top:10px">
+        <label>不透明度</label>
+        <div class="opacity-row">
+          <input type="range" id="opacitySlider" min="0" max="100" value="75">
+          <span class="opacity-val" id="opacityVal">75%</span>
+        </div>
+      </div>
+      <div style="margin-top:10px"><button class="btn btn-primary" id="loadBtn">▶ 描画</button></div>
+    </div>
+    <div class="section">
+      <div class="section-title">背景地図</div>
+      <div class="tile-btn-group">
+        <div class="tile-btn active" data-tile="osm">OSM</div>
+        <div class="tile-btn" data-tile="carto">Carto</div>
+        <div class="tile-btn" data-tile="gsi">地理院</div>
+        <div class="tile-btn" data-tile="dark">Dark</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">農地ポリゴン (GeoJSON)</div>
+      <div class="drop-zone" id="dropZone">ドロップ または クリック<br><span style="font-size:9px">*.geojson / *.json</span></div>
+      <input type="file" id="geojsonInput" accept=".geojson,.json">
+      <div class="geojson-name" id="geojsonName"></div>
+      <button class="btn btn-secondary" id="clearGeoBtn" style="display:none">× 削除</button>
+    </div>
+    <div id="status">準備完了</div>
+  </div>
+  <div id="mapWrap" style="flex:1;position:relative;overflow:hidden;">
+    <div id="map" style="width:100%;height:100%;"></div>
+    <button id="chartToggleBtn">📈 時系列グラフ</button>
+    <div id="chartPanel">
+      <div class="chart-header">
+        <div class="chart-title">NDVI 時系列</div>
+        <div class="chart-coord" id="chartCoord">—</div>
+        <div class="chart-year-filter">
+          <span>年</span>
+          <select id="chartYearFrom"></select>
+          <span>〜</span>
+          <select id="chartYearTo"></select>
+          <button class="btn btn-primary" id="chartReloadBtn" style="width:auto;padding:3px 10px;font-size:10px;margin:0">再描画</button>
+        </div>
+        <button class="chart-close" id="chartClose">✕</button>
+      </div>
+      <div class="chart-body">
+        <div class="chart-loading" id="chartLoading" style="display:none">
+          <div class="spinner"></div>
+          <span id="chartLoadingMsg">取得中...</span>
+        </div>
+        <canvas id="ndviChart"></canvas>
+      </div>
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:#39d353"></span>NDVI月次値</span>
+        <span><span class="legend-dot" style="background:#f0b42980"></span>欠損（雲等）</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(async function(){
+  const COLLECTION_URL="https://s3.ap-northeast-1.wasabisys.com/je-pds/cog/v1/JAXA.G-Portal_GCOM-C.SGLI_standard.L3-NDVI.daytime.v3_global_monthly/collection.json";
+  const BAND="NDVI";
+
+  function buildDates(){
+    const r=[];const now=new Date();
+    let y=2018,m=1;
+    while(y<now.getUTCFullYear()||(y===now.getUTCFullYear()&&m<=now.getUTCMonth())){
+      r.push(new Date(Date.UTC(y,m-1,1)));
+      m++;if(m>12){m=1;y++;}
+    }
+    return r;
+  }
+  const dates=buildDates();
+
+  const PRESETS={izumo:[132.55,35.28,133.05,35.55],matsue:[132.95,35.35,133.25,35.60],shimane:[131.6,34.2,133.6,35.8],chugoku:[130.5,33.5,135.0,36.0]};
+  const TILES={osm:["https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png","© OpenStreetMap"],carto:["https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png","© Carto"],gsi:["https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png","© 国土地理院"],dark:["https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png","© Carto"]};
+
+  const map=L.map("map",{zoomControl:true});
+  map.setView([35.38,132.76],10);
+  let base=L.tileLayer(TILES.osm[0],{attribution:TILES.osm[1],maxZoom:18}).addTo(map);
+  let ndviLayer=null,geoLayer=null,curDO=null,curInsp=null;
+
+  const statusEl=document.getElementById("status");
+  const loadBtn=document.getElementById("loadBtn");
+  const slider=document.getElementById("dateSlider");
+  const disp=document.getElementById("dateDisplay");
+  const opSlider=document.getElementById("opacitySlider");
+  const opVal=document.getElementById("opacityVal");
+
+  function setStatus(msg,t=""){
+    statusEl.className=t;
+    statusEl.innerHTML=t==="loading"?`<div class="spinner"></div>${msg}`:msg;
+  }
+  function fmt(d){return d.getUTCFullYear()+" / "+String(d.getUTCMonth()+1).padStart(2,"0");}
+  function fmts(d){return d.getUTCFullYear()+"/"+String(d.getUTCMonth()+1).padStart(2,"0");}
+  function fmtISO(d){return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-01T00:00:00Z";}
+
+  slider.min=0; slider.max=dates.length-1; slider.value=dates.length-1;
+  document.getElementById("dateMin").textContent=fmts(dates[0]);
+  document.getElementById("dateMax").textContent=fmts(dates[dates.length-1]);
+  disp.textContent=fmt(dates[dates.length-1]);
+  slider.addEventListener("input",()=>disp.textContent=fmt(dates[parseInt(slider.value)]));
+
+  setStatus("準備完了 — 「▶ 描画」を押してください","ok");
+
+  document.getElementById("bboxPreset").addEventListener("change",function(){
+    const k=this.value; if(k==="custom")return;
+    const[w,s,e,n]=PRESETS[k];
+    document.getElementById("bboxW").value=w;document.getElementById("bboxS").value=s;
+    document.getElementById("bboxE").value=e;document.getElementById("bboxN").value=n;
+    map.fitBounds([[s,w],[n,e]]);
+  });
+
+  opSlider.addEventListener("input",()=>{
+    const v=parseInt(opSlider.value);opVal.textContent=v+"%";
+    if(ndviLayer)ndviLayer.setOpacity(v/100);
+  });
+
+  function makeColorMap(){
+    return new je.image.ColorMap({
+      min:-0.2,max:0.9,
+      colors:["#8B4513","#D2B48C","#F5F5DC","#90EE90","#32CD32","#006400"],
+      noDataColor:"#00000000"
+    });
+  }
+
+  async function renderNDVI(){
+    const w=parseFloat(document.getElementById("bboxW").value);
+    const s=parseFloat(document.getElementById("bboxS").value);
+    const e=parseFloat(document.getElementById("bboxE").value);
+    const n=parseFloat(document.getElementById("bboxN").value);
+    if(isNaN(w)||isNaN(s)||isNaN(e)||isNaN(n)||w>=e||s>=n){setStatus("bboxが不正です","error");return;}
+    const date=dates[parseInt(slider.value)];
+    loadBtn.disabled=true;
+    setStatus("NDVI取得中... "+fmts(date),"loading");
+    try{
+      const bbox=[w,s,e,n];
+      const W=256,H=Math.max(1,Math.round(W*(n-s)/(e-w)));
+      curDO=await je.getDataObject({
+        collectionUrl:COLLECTION_URL,
+        date:new Date(fmtISO(date)),
+        band:BAND,bbox,width:W,height:H
+      });
+      const canvas=je.image.createCanvas(curDO,makeColorMap());
+      const bounds=[[s,w],[n,e]];
+      const op=parseInt(opSlider.value)/100;
+      if(ndviLayer)map.removeLayer(ndviLayer);
+      ndviLayer=L.imageOverlay(canvas.toDataURL("image/png"),bounds,{opacity:op,interactive:false}).addTo(map);
+      if(geoLayer)geoLayer.bringToFront();
+      curInsp=new je.data.Inspector({dataObject:curDO});
+      map.fitBounds(bounds);
+      setStatus("表示完了 — "+fmts(date),"ok");
+    }catch(err){
+      setStatus("描画エラー: "+err.message,"error");
+      console.error(err);
+    }finally{loadBtn.disabled=false;}
+  }
+  loadBtn.addEventListener("click",renderNDVI);
+
+  map.on("click",function(ev){
+    if(!curInsp)return;
+    const{lat,lng}=ev.latlng;
+    try{
+      const val=curInsp.getValueAt({lng,lat});
+      const v=val?val[0]:null;
+      const ok=v!==null&&!isNaN(v)&&v>-1;
+      const desc=ok?ndviDesc(v):null;
+      const gbtn=`<div style="margin-top:8px"><button onclick="window._chart(${lat},${lng})"
+        style="background:${ok?"#1f2d1f":"#21262d"};border:1px solid ${ok?"#2ea043":"#30363d"};
+               color:${ok?"#39d353":"#e6edf3"};font-size:10px;padding:4px 10px;border-radius:4px;
+               cursor:pointer;width:100%;font-weight:600">📈 時系列グラフ</button></div>`;
+      const c=ok
+        ?`<div class="popup-label">NDVI</div>
+          <div class="popup-ndvi-val">${v.toFixed(3)}</div>
+          <div style="font-size:11px;color:${desc.color};margin-top:2px">${desc.label}</div>
+          <div style="font-size:10px;color:#7d8590;margin-top:6px">${lat.toFixed(4)}° / ${lng.toFixed(4)}°</div>${gbtn}`
+        :`<div class="popup-label">緯度/経度</div>
+          <div>${lat.toFixed(4)}° / ${lng.toFixed(4)}°</div>
+          <div style="color:#7d8590;font-size:10px;margin-top:6px">欠損値（雲・データなし）</div>${gbtn}`;
+      L.popup().setLatLng(ev.latlng).setContent(`<div style="min-width:160px">${c}</div>`).openOn(map);
+    }catch(e){console.warn(e);}
+  });
+
+  function ndviDesc(v){
+    if(v<0)   return{label:"水面・雪・岩",color:"#58a6ff"};
+    if(v<0.1) return{label:"裸地・砂漠",  color:"#d2b48c"};
+    if(v<0.2) return{label:"疎な植生",    color:"#c8e6c9"};
+    if(v<0.4) return{label:"草地・農地",  color:"#66bb6a"};
+    if(v<0.6) return{label:"健全な農地",  color:"#43a047"};
+    return         {label:"濃い植生",    color:"#1b5e20"};
+  }
+
+  document.querySelectorAll(".tile-btn").forEach(btn=>btn.addEventListener("click",function(){
+    document.querySelectorAll(".tile-btn").forEach(b=>b.classList.remove("active"));
+    this.classList.add("active");
+    map.removeLayer(base);
+    const k=this.dataset.tile;
+    base=L.tileLayer(TILES[k][0],{attribution:TILES[k][1],maxZoom:18}).addTo(map);
+    if(ndviLayer)ndviLayer.bringToFront();
+    if(geoLayer)geoLayer.bringToFront();
+  }));
+
+  const dropZone=document.getElementById("dropZone");
+  const geoInput=document.getElementById("geojsonInput");
+  const geoName=document.getElementById("geojsonName");
+  const clearBtn=document.getElementById("clearGeoBtn");
+  dropZone.addEventListener("click",()=>geoInput.click());
+  dropZone.addEventListener("dragover",e=>{e.preventDefault();dropZone.classList.add("dragover");});
+  dropZone.addEventListener("dragleave",()=>dropZone.classList.remove("dragover"));
+  dropZone.addEventListener("drop",e=>{e.preventDefault();dropZone.classList.remove("dragover");if(e.dataTransfer.files[0])loadGeo(e.dataTransfer.files[0]);});
+  geoInput.addEventListener("change",function(){if(this.files[0])loadGeo(this.files[0]);});
+  clearBtn.addEventListener("click",()=>{if(geoLayer){map.removeLayer(geoLayer);geoLayer=null;}geoName.textContent="";clearBtn.style.display="none";geoInput.value="";});
+  function loadGeo(file){
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{
+        if(geoLayer)map.removeLayer(geoLayer);
+        geoLayer=L.geoJSON(JSON.parse(ev.target.result),{
+          style:{color:"#f0b429",weight:1.5,opacity:.9,fillColor:"#f0b429",fillOpacity:.08},
+          onEachFeature(f,l){if(f.properties){const p=Object.entries(f.properties).map(([k,v])=>`<span style="color:#7d8590">${k}</span>: ${v}`).join("<br>");l.bindPopup(`<div style="font-size:11px;max-width:200px">${p}</div>`);}}
+        }).addTo(map);
+        geoName.textContent="✓ "+file.name;clearBtn.style.display="block";
+        setStatus("GeoJSON読込完了","ok");
+      }catch(e){setStatus("GeoJSON解析エラー: "+e.message,"error");}
+    };
+    r.readAsText(file);
+  }
+
+  // グラフ
+  let chart=null,cLat=null,cLng=null,panelOpen=false;
+  const panel=document.getElementById("chartPanel");
+  const togBtn=document.getElementById("chartToggleBtn");
+  const yfrom=document.getElementById("chartYearFrom");
+  const yto=document.getElementById("chartYearTo");
+
+  initYearFilter();
+
+  function openPanel(){panelOpen=true;panel.classList.add("open");togBtn.classList.add("active");togBtn.textContent="✕ グラフを閉じる";setTimeout(()=>map.invalidateSize(),310);}
+  function closePanel(){panelOpen=false;panel.classList.remove("open");togBtn.classList.remove("active");togBtn.textContent="📈 時系列グラフ";setTimeout(()=>map.invalidateSize(),310);}
+  togBtn.addEventListener("click",()=>{if(panelOpen){closePanel();}else{openPanel();if(cLat!==null)loadChart(cLat,cLng);}});
+  document.getElementById("chartClose").addEventListener("click",closePanel);
+  document.getElementById("chartReloadBtn").addEventListener("click",()=>{if(cLat!==null)loadChart(cLat,cLng);});
+
+  function initYearFilter(){
+    const ys=[...new Set(dates.map(d=>d.getUTCFullYear()))].sort();
+    yfrom.innerHTML=ys.map(y=>`<option value="${y}">${y}</option>`).join("");
+    yto.innerHTML=ys.map(y=>`<option value="${y}">${y}</option>`).join("");
+    yfrom.value=ys[0]; yto.value=ys[ys.length-1];
+  }
+
+  async function loadChart(lat,lng){
+    const yf=parseInt(yfrom.value),yt=parseInt(yto.value);
+    if(yf>yt){setStatus("年範囲が不正です","error");return;}
+    cLat=lat;cLng=lng;
+    document.getElementById("chartCoord").textContent=lat.toFixed(4)+"°N / "+lng.toFixed(4)+"°E";
+    const td=dates.filter(d=>{const y=d.getUTCFullYear();return y>=yf&&y<=yt;});
+    const loading=document.getElementById("chartLoading");
+    const msg=document.getElementById("chartLoadingMsg");
+    loading.style.display="flex";
+    if(chart){chart.destroy();chart=null;}
+    document.getElementById("ndviChart").style.display="none";
+    const bbox=[lng-0.05,lat-0.05,lng+0.05,lat+0.05];
+    const labels=[],vals=[];
+    for(let i=0;i<td.length;i++){
+      const d=td[i];
+      msg.textContent=`取得中 ${i+1}/${td.length} — ${fmts(d)}`;
+      try{
+        const dataObj=await je.getDataObject({collectionUrl:COLLECTION_URL,date:new Date(fmtISO(d)),band:BAND,bbox,width:3,height:3});
+        const ins=new je.data.Inspector({dataObject:dataObj});
+        const v=ins.getValueAt({lng,lat});
+        const val=v?v[0]:null;
+        labels.push(fmts(d));
+        vals.push((val===null||isNaN(val)||val<-0.5)?null:parseFloat(val.toFixed(4)));
+      }catch{labels.push(fmts(d));vals.push(null);}
+    }
+    loading.style.display="none";
+    document.getElementById("ndviChart").style.display="block";
+    const good=vals.filter(v=>v!==null);
+    const ymin=good.length?Math.max(-0.2,Math.min(...good)-0.05):-0.2;
+    const ymax=good.length?Math.min(1.0,Math.max(...good)+0.05):1.0;
+    chart=new Chart(document.getElementById("ndviChart").getContext("2d"),{
+      type:"line",
+      data:{labels,datasets:[{label:"NDVI",data:vals,borderColor:"#39d353",backgroundColor:"rgba(57,211,83,.08)",
+        pointBackgroundColor:vals.map(v=>v===null?"transparent":"#39d353"),
+        pointBorderColor:vals.map(v=>v===null?"transparent":"#39d353"),
+        pointRadius:3,pointHoverRadius:5,borderWidth:1.5,fill:true,tension:0.3,spanGaps:false}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:400},
+        scales:{
+          x:{ticks:{color:"#7d8590",font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:24},grid:{color:"#21262d"}},
+          y:{min:ymin,max:ymax,ticks:{color:"#7d8590",font:{size:10},callback:v=>v.toFixed(2)},grid:{color:"#21262d"},
+             title:{display:true,text:"NDVI",color:"#7d8590",font:{size:10}}}},
+        plugins:{legend:{display:false},
+          tooltip:{backgroundColor:"#161b22",borderColor:"#21262d",borderWidth:1,titleColor:"#7d8590",bodyColor:"#e6edf3",
+            callbacks:{label:c=>c.parsed.y===null?"欠損（雲等）":"NDVI: "+c.parsed.y.toFixed(4)}}}}
+    });
+    setStatus("グラフ完了 ("+good.length+"/"+td.length+"ヶ月有効)","ok");
+  }
+
+  window._chart=function(lat,lng){map.closePopup();openPanel();loadChart(lat,lng);};
+})();
+</script>
+</body>
+</html>
