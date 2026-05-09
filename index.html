@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NDVI分析ツール メインメニュー</title>
-    <!-- LeafletやChart.jsは基本的に不要ですが、スタイルシートを適用するため残します -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-
     <style>
-        /* 基本的なリセットとフォント設定 */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5; /* 明るいグレーの背景 */
+            background-color: #f0f2f5;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -19,8 +16,6 @@
             min-height: 100vh;
             margin: 0;
         }
-
-        /* メインコンテナの設定（メニュー全体を囲む） */
         .menu-container {
             background-color: white;
             padding: 40px 50px;
@@ -28,71 +23,60 @@
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
             text-align: center;
             width: 90%;
-            max-width: 700px; /* メニューの最大幅 */
+            max-width: 700px;
         }
-
-        /* タイトル */
         h1 {
             color: #2c3e50;
             margin-bottom: 40px;
-            font-size: 2.5em;
-            border-bottom: 3px solid #3498db; /* アクセントカラーのアンダーライン */
+            font-size: 2.2em;
+            border-bottom: 3px solid #3498db;
             padding-bottom: 10px;
         }
-
-        /* 各リンク（ボタン）の共通スタイル */
         .menu-button {
             display: block;
-            text-decoration: none; /* 下線を消す */
-            background-color: #3498db; /* メインカラー (青) */
+            text-decoration: none;
+            background-color: #3498db;
             color: white;
             padding: 15px 20px;
             margin-bottom: 20px;
             border-radius: 8px;
-            font-size: 1.2em;
+            font-size: 1.1em;
             text-align: center;
-            transition: background-color 0.3s, transform 0.2s; /* ホバー時のアニメーション */
+            transition: background-color 0.3s, transform 0.2s;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            width: fit-content; /* 幅を内容に合わせる */
         }
-
-        /* ボタンにマウスカーソルが乗ったときのアクション */
         .menu-button:hover {
-            background-color: #2980b9; /* 少し濃い青にする */
-            transform: translateY(-2px); /* 浮き上がらせる効果 */
+            background-color: #2980b9;
+            transform: translateY(-2px);
             box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
         }
-
-         /* 説明文のスタイル調整 */
-        p {
-             margin-top: 30px;
-             color: #7f8c8d;
-             font-size: 0.9em;
-        }
-
+        .green-btn { background-color: #27ae60; }
+        .green-btn:hover { background-color: #219150; }
+        p { margin-top: 30px; color: #7f8c8d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="menu-container">
         <h1>🛰️ NDVI分析ツール メニュー</h1>
         
-        <!-- リンク①：GeoTIFFファイルをアップロードして解析 -->
-        <a href="./NDVI_Copernicus_GeoTIFF_Analyzer.html" class="menu-button">
-            🟡 GeoTIFFファイルによる解析 (NDVI_Copernicus_GeoTIFF_Analyzer.html)
+        <!-- 修正①：コペルニクス解析 -->
+        <a href="NDVI_Copernicus_GeoTIFF_Analyzer.html" class="menu-button">
+            🟡 GeoTIFFファイルによる解析 (Copernicus)
         </a>        
-        <!-- リンク②：APIを利用した解析 -->
-        <a href="./NDVI_API_Analyzer.html" class="menu-button">
-            🟢 APIによる解析 (NDVI_API_Analyzer.html)
+        
+        <!-- 修正②：API -->
+        <a href="NDVI_API_Analyzer.html" class="menu-button green-btn">
+            🟢 APIによる解析 (Standard API)
         </a>
 
-        <!-- リンク③：GeoTIFFファイルをアップロードして解析 -->
-        <a href="./NDVI_GeoTIFF_Analayzer.html" class="menu-button">
-            🟡 GeoTIFFファイルによる解析 (NDVI_GeoTIFF_Analayzer.html)
+        <!-- 修正③：スペルを Analayzer → Analyzer に修正 -->
+        <a href="NDVI_GeoTIFF_Analyzer.html" class="menu-button">
+            🟡 GeoTIFFファイルによる解析 (Standard)
         </a>
 
-       <!-- リンク④：APIを利用した解析 -->
-        <a href="./Google_NDVI_Analyzer_LMS.html" class="menu-button">
-            🟡 APIによる解析 (Google_NDVI_Analyzer_LMS.html)
+        <!-- 修正④：LMS -->
+        <a href="Google_NDVI_Analyzer_LMS.html" class="menu-button">
+            🟡 APIによる解析 (LMS)
         </a>
                
         <p>※ 各リンクは、同じフォルダ内にあるファイルを起動します。</p>
