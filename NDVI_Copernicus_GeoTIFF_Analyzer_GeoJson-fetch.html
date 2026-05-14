@@ -1,42 +1,355 @@
-function renderFileList() {
-      const ul = document.getElementById('fileList');
-      ul.innerHTML = '';
-      for (const name in S.files) {
-        const f = S.files[name];
-        // このファイルがキャッシュにあり、かつ visible かどうか
-        const cached = S.overlayCache.find(c => c.sourceFile === name);
-        const isVisible = cached && cached.visible;
-        const isActive = name === S.activeFileName;
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NDVI Analyzer [GitHub & Copernicus Edition]</title>
 
-        const li = document.createElement('li');
-        // 表示中のものはボーダーの色を変える
-        li.className = 'file-item' + (isVisible ? ' active' : '');
-        li.style.borderLeft = isVisible ? '4px solid #16a34a' : '4px solid #d1d5db';
-        li.dataset.name = name;
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
 
-        const info = document.createElement('div');
-        info.className = 'file-item-info';
-        info.innerHTML =
-          '<div class="file-item-name">' + (isVisible ? '👁️ ' : '') + escHtml(shortName(name)) + '</div>' +
-          '<div class="file-item-meta">' + f.width + '×' + f.height + 
-          ' <span class="epsg-badge">EPSG:' + (f.epsg || '??') + '</span></div>';
+  <style>
+    :root {
+      --bg: #ffffff; --panel: #f8fafc; --card: #ffffff; --border: #cbd5e1;
+      --accent: #059669; --blue: #3b82f6; --red: #ef4444; --text: #0f172a;
+      --muted: #64748b; --mono: 'Space Mono', monospace;
+    }
+    body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header { background: var(--panel); padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; z-index: 1000; }
+    header h1 { font-size: 1rem; margin: 0; flex: 1; }
+    .app-body { display: flex; flex: 1; overflow: hidden; }
+    .side { width: 340px; background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+    .sh { font-size: 0.7rem; font-weight: bold; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .file-item { 
+      padding: 8px; background: white; border: 1px solid var(--border); border-left: 4px solid #d1d5db; 
+      border-radius: 4px; margin-bottom: 5px; cursor: pointer; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;
+    }
+    .file-item:hover { background: #f0fdf4; }
+    .file-item.active { border-left-color: var(--accent); background: #ecfdf5; font-weight: bold; }
+    .del-btn { background: none; border: none; color: var(--red); cursor: pointer; font-weight: bold; padding: 0 5px; }
+    .status { font-size: 0.7rem; padding: 8px; border-radius: 4px; background: #e2e8f0; margin-top: 5px; line-height: 1.4; }
+    .status.loading { background: #dbeafe; color: #1e40af; }
+    .status.ok { background: #dcfce7; color: #166534; }
+    .map-area { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    .map-legend { position: absolute; bottom: 30px; right: 10px; z-index: 900; background: white; padding: 10px; border: 1px solid var(--border); border-radius: 5px; min-width: 180px; }
+    .leg-item { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; margin-bottom: 2px; }
+    .color-box { width: 14px; height: 14px; border: 1px solid #999; }
+    .controls { background: white; border: 1px solid var(--border); padding: 10px; border-radius: 6px; }
+    .controls label { font-size: 0.7rem; display: block; margin-bottom: 4px; font-weight: bold; }
+    .controls select { width: 100%; font-size: 0.75rem; padding: 4px; margin-bottom: 8px; }
+    .btn { width: 100%; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.75rem; }
+    .btn:hover { opacity: 0.9; }
+    .stats-mini { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 5px; }
+    .scard { background: white; border: 1px solid var(--border); padding: 5px; border-radius: 4px; text-align: center; }
+    .sk { font-size: 0.6rem; color: var(--muted); }
+    .sv { font-size: 0.75rem; font-weight: bold; }
+  </style>
+</head>
+<body>
 
-        const btn = document.createElement('button');
-        btn.className = 'del-btn';
-        btn.textContent = '✕';
-        
-        // ✕ボタンクリック時に親要素のクリック（表示切り替え）が走らないようにする
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          const cached = S.overlayCache.find(c => c.sourceFile === name);
-          if (cached) deleteCache(cached.id);
-          delete S.files[name];
-          renderFileList();
-          refreshSelects();
-        };
+<header>
+  <h1>🛰️ NDVI GeoTIFF Analyzer [GitHub Edition]</h1>
+  <div id="lib-status" style="font-size:0.7rem"></div>
+</header>
 
-        li.appendChild(info);
-        li.appendChild(btn);
-        ul.appendChild(li);
+<div class="app-body">
+  <div class="side">
+    <div>
+      <div class="sh">GitHub リポジトリ連携</div>
+      <div id="repo-info" class="status">設定を読み込み中...</div>
+      <ul id="fileList" style="list-style:none; padding:0; margin-top:10px;"></ul>
+    </div>
+
+    <div id="panel-ndvi" class="controls">
+      <div class="sh">NDVI 手動計算 (B4 & B8)</div>
+      <label>赤バンド (B04)</label>
+      <select id="redBand"></select>
+      <label>近赤外バンド (B08)</label>
+      <select id="nirBand"></select>
+      <button class="btn" onclick="computeNDVI()">🔢 計算して表示</button>
+    </div>
+
+    <div class="controls">
+      <div class="sh">表示設定</div>
+      <label>不透明度</label>
+      <input type="range" id="opacity" min="0" max="100" value="80" style="width:100%" oninput="updateOpacity(this.value)">
+    </div>
+
+    <div id="sec-stats" style="display:none">
+      <div class="sh">統計情報</div>
+      <div class="stats-mini">
+        <div class="scard"><div class="sk">最小</div><div class="sv" id="vMin">-</div></div>
+        <div class="scard"><div class="sk">最大</div><div class="sv" id="vMax">-</div></div>
+        <div class="scard"><div class="sk">平均</div><div class="sv" id="vMean">-</div></div>
+      </div>
+    </div>
+
+    <div id="status" class="status">ファイルを待機中...</div>
+  </div>
+
+  <div class="map-area">
+    <div id="map"></div>
+    <div id="map-legend" class="map-legend">
+      <div style="font-size:0.75rem; font-weight:bold; margin-bottom:5px; color:var(--accent);">NDVI 凡例</div>
+      <div id="legend-items"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  'use strict';
+
+  // --- 設定 ---
+  const GITHUB_CONFIG = {
+    owner:  'swd-hub',
+    repo:   'NDVI',
+    path:   'GeoTIFF', // フォルダ名
+    branch: 'main'
+  };
+
+  const S = {
+    map: null,
+    files: {},
+    overlayCache: [], // { name, layer, stats }
+    opacity: 0.8,
+    activeFile: null
+  };
+
+  // --- 座標定義 ---
+  if (typeof proj4 !== 'undefined') {
+    proj4.defs([
+      ['EPSG:32652', '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs'],
+      ['EPSG:32653', '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs'],
+      ['EPSG:32654', '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs']
+    ]);
+  }
+
+  // --- 初期化 ---
+  window.addEventListener('DOMContentLoaded', async () => {
+    S.map = L.map('map').setView([35.367, 132.755], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(S.map);
+
+    updateLegend();
+    await loadTiffFiles();
+  });
+
+  // --- GitHubからファイル取得 ---
+  async function loadTiffFiles() {
+    const { owner, repo, path, branch } = GITHUB_CONFIG;
+    const infoEl = document.getElementById('repo-info');
+    setStatus('GitHubからリストを取得中...', 'loading');
+
+    try {
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+      const res = await fetch(apiUrl);
+      if (!res.ok) throw new Error('GitHub連携エラー (404等)');
+      const entries = await res.json();
+      const tifFiles = entries.filter(e => /\.tiff?$/i.test(e.name));
+
+      infoEl.innerHTML = `✅ <b>${repo}/${path}</b><br>${tifFiles.length}個のTIFが見つかりました`;
+
+      for (const entry of tifFiles) {
+        setStatus(`読込中: ${entry.name}`, 'loading');
+        const r = await fetch(entry.download_url);
+        const buf = await r.arrayBuffer();
+        await processTiff(buf, entry.name);
+      }
+      
+      renderFileList();
+      refreshSelects();
+      setStatus('すべてのファイルを読み込みました', 'ok');
+    } catch (e) {
+      setStatus('エラー: ' + e.message, 'error');
+      infoEl.innerHTML = `❌ 接続失敗: ${e.message}`;
+    }
+  }
+
+  async function processTiff(buffer, name) {
+    const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+    const img = await tiff.getImage();
+    const data = await img.readRasters();
+    const bbox = img.getBoundingBox();
+    
+    // 簡易座標変換
+    const [w, s, e, n] = bbox;
+    let bounds = [[s, w], [n, e]];
+    
+    // UTM等の場合はproj4で変換（簡易実装）
+    if (w > 1000) {
+        // 本来は正確なEPSG判定が必要ですが、ここでは日本周辺のUTM53/54を想定
+        const epsg = (w < 500000) ? 'EPSG:32653' : 'EPSG:32654';
+        try {
+            const c1 = proj4(epsg, 'EPSG:4326', [w, s]);
+            const c2 = proj4(epsg, 'EPSG:4326', [e, n]);
+            bounds = [[c1[1], c1[0]], [c2[1], c2[0]]];
+        } catch(err) {}
+    }
+
+    S.files[name] = { data, width: img.getWidth(), height: img.getHeight(), bounds, bands: data.length };
+  }
+
+  // --- 表示切り替え ---
+  async function quickDisplay(name) {
+    const f = S.files[name];
+    if (!f) return;
+    S.activeFile = name;
+
+    // 1. 既存のレイヤーをすべて消去（切り替えの肝）
+    S.overlayCache.forEach(item => S.map.removeLayer(item.layer));
+    S.overlayCache = [];
+
+    setStatus(`${name} を解析中...`, 'loading');
+    await new Promise(r => setTimeout(r, 50));
+
+    // 2. データからNDVI作成
+    let targetData, mn, mx, mean;
+    
+    if (f.bands >= 1) {
+      // 1バンド目はそのままNDVIとして扱うか解析
+      targetData = f.data[0];
+      const stats = getStats(targetData);
+      mn = stats.min; mx = stats.max; mean = stats.mean;
+    }
+
+    // 3. レイヤー生成
+    const canvas = document.createElement('canvas');
+    canvas.width = f.width; canvas.height = f.height;
+    const ctx = canvas.getContext('2d');
+    const imgD = ctx.createImageData(f.width, f.height);
+    const px = imgD.data;
+
+    for (let i = 0; i < targetData.length; i++) {
+      const v = targetData[i];
+      if (!isFinite(v) || v === 0) { px[i*4+3] = 0; continue; }
+      const [r, g, b] = getNDVIColor(v);
+      px[i*4] = r; px[i*4+1] = g; px[i*4+2] = b; px[i*4+3] = 255;
+    }
+    ctx.putImageData(imgD, 0, 0);
+
+    const layer = L.imageOverlay(canvas.toDataURL(), f.bounds, { opacity: S.opacity }).addTo(S.map);
+    S.overlayCache.push({ name, layer });
+
+    // 4. UI更新
+    S.map.fitBounds(f.bounds);
+    showStatsUI(mn, mx, mean);
+    renderFileList();
+    setStatus(`表示中: ${name}`, 'ok');
+  }
+
+  // --- NDVI色分け (ご要望の5クラス) ---
+  function getNDVIColor(v) {
+    if (v < 0.2)  return [200, 200, 200]; // グレー (非植生)
+    if (v < 0.35) return [255, 255, 190]; // 薄い黄 (低)
+    if (v < 0.5)  return [173, 255, 47];  // 黄緑 (中)
+    if (v < 0.7)  return [34, 139, 34];   // 緑 (高)
+    return [0, 100, 0];                   // 深緑 (極高)
+  }
+
+  function updateLegend() {
+    const items = [
+      { c: [200, 200, 200], t: '0.2未満 (地表/建物)' },
+      { c: [255, 255, 190], t: '0.2 - 0.35 (低密度)' },
+      { c: [173, 255, 47],  t: '0.35 - 0.5 (中密度)' },
+      { c: [34, 139, 34],   t: '0.5 - 0.7 (高密度)' },
+      { c: [0, 100, 0],     t: '0.7以上 (密集地)' }
+    ];
+    const container = document.getElementById('legend-items');
+    container.innerHTML = items.map(i => `
+      <div class="leg-item">
+        <div class="color-box" style="background:rgb(${i.c.join(',')})"></div>
+        <span>${i.t}</span>
+      </div>
+    `).join('');
+  }
+
+  // --- NDVI 手動計算 ---
+  async function computeNDVI() {
+    const rKey = document.getElementById('redBand').value;
+    const nKey = document.getElementById('nirBand').value;
+    if (!rKey || !nKey) return;
+
+    const rFile = rKey.split('|')[0], rIdx = rKey.split('|')[1];
+    const nFile = nKey.split('|')[0], nIdx = nKey.split('|')[1];
+
+    const red = S.files[rFile].data[rIdx];
+    const nir = S.files[nFile].data[nIdx];
+    const ndvi = new Float32Array(red.length);
+
+    for (let i = 0; i < red.length; i++) {
+      const r = red[i], n = nir[i];
+      ndvi[i] = (r + n === 0) ? 0 : (n - r) / (n + r);
+    }
+
+    // 計算結果を一時的な仮想ファイルとして登録して表示
+    const name = `NDVI_Calc_${Date.now()}`;
+    S.files[name] = { ...S.files[rFile], data: [ndvi], bands: 1 };
+    await quickDisplay(name);
+  }
+
+  // --- ユーティリティ ---
+  function getStats(arr) {
+    let min = Infinity, max = -Infinity, sum = 0, cnt = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (isFinite(v) && v !== 0) {
+        if (v < min) min = v; if (v > max) max = v; sum += v; cnt++;
       }
     }
+    return { min, max, mean: sum / cnt };
+  }
+
+  function showStatsUI(mn, mx, mean) {
+    document.getElementById('sec-stats').style.display = 'block';
+    document.getElementById('vMin').textContent = mn.toFixed(2);
+    document.getElementById('vMax').textContent = mx.toFixed(2);
+    document.getElementById('vMean').textContent = mean.toFixed(2);
+  }
+
+  function renderFileList() {
+    const ul = document.getElementById('fileList');
+    ul.innerHTML = '';
+    Object.keys(S.files).forEach(name => {
+      const li = document.createElement('li');
+      li.className = 'file-item' + (S.activeFile === name ? ' active' : '');
+      li.innerHTML = `<span>${name}</span>`;
+      li.onclick = () => quickDisplay(name);
+      ul.appendChild(li);
+    });
+  }
+
+  function refreshSelects() {
+    const rSelect = document.getElementById('redBand');
+    const nSelect = document.getElementById('nirBand');
+    [rSelect, nSelect].forEach(s => s.innerHTML = '');
+    
+    Object.keys(S.files).forEach(fname => {
+      for (let i = 0; i < S.files[fname].bands; i++) {
+        const opt = new Option(`${fname} (B${i+1})`, `${fname}|${i}`);
+        rSelect.add(opt.cloneNode(true));
+        nSelect.add(opt.cloneNode(true));
+      }
+    });
+  }
+
+  function updateOpacity(v) {
+    S.opacity = v / 100;
+    S.overlayCache.forEach(item => item.layer.setOpacity(S.opacity));
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status ' + type;
+  }
+</script>
+
+</body>
+</html>
