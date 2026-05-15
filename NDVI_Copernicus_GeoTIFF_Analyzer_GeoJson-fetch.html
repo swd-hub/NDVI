@@ -587,7 +587,7 @@
           <div class="sh">表示設定</div>
           <div class="cfg">
             <div class="tabs">
-              <div class="tab active" id="tab-ndvi">📊 NDVI計算（B04+B08）</div>
+              <div class="tab active" id="tab-ndvi">📊 NDVI モード</div>
               <div class="tab" id="tab-single">🖼️ そのまま表示</div>
             </div>
 
@@ -617,7 +617,7 @@
               <label>表示方法</label>
               <select id="colormap" style="margin-bottom:8px;">
                 <option value="rgb">🎨 色付き済みTIFFをそのまま表示（Copernicusカラー画像 / 3バンド以上）</option>
-                <option value="ndvi">🟢 緑グラデーション（NDVIindexファイル用）</option>
+                <option value="ndvi">🟢 NDVI カラー（植生専用配色）</option>
                 <option value="gray">⬜ グレースケール</option>
                 <option value="hot">🌡️ ヒートマップ（黒→赤→黄）</option>
                 <option value="blue">🔵 ブルー</option>
@@ -1376,6 +1376,7 @@
     // ファイル一発表示（👁ボタン用）
     // =====================================================
     async function quickDisplay(name) {
+      S.lastDisplayMode = 'quick';
       const f = S.files[name];
       if (!f) return;
 
@@ -1440,10 +1441,51 @@
     }
 
     // =====================================================
+    // NDVI 直接計算（ファイル名・バンドidxを直接指定）
+    // =====================================================
+    async function computeNDVIDirect(name, redIdx, nirIdx) {
+      const f = S.files[name];
+      if (!f) return;
+
+      const red = f.data[redIdx];
+      const nir = f.data[nirIdx];
+      const { width, height, reprojBbox, epsg } = f;
+
+      const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+      S._pendingLabel      = `NDVI ${shortName(name)} B${redIdx+1}/B${nirIdx+1} ${ts}`;
+      S._pendingSourceFile = name;
+      clearSourceOverlay(name);
+
+      const ndvi = new Float32Array(width * height);
+      let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < red.length; i++) {
+        const r = red[i], n = nir[i];
+        if (r === 0 && n === 0) { ndvi[i] = NaN; continue; }
+        const denom = r + n;
+        const v = denom === 0 ? 0 : (n - r) / denom;
+        ndvi[i] = v; sum += v; cnt++;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+
+      S.currentData   = ndvi;
+      S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
+      S.currentWidth  = width;
+      S.currentHeight = height;
+
+      showStats(mn, mx, cnt > 0 ? sum / cnt : 0, epsg);
+      renderOverlay(ndvi, width, height, reprojBbox, 'ndvi', mn, mx);
+      drawColorbar('ndvi', mn, mx, 'NDVI 値');
+      setStatus(`✅ NDVI 計算完了 (${cnt} px 有効)`, 'ok');
+    }
+
+    // =====================================================
     // ラジオ切り替え（1枚だけ表示）
     // =====================================================
     async function switchToTif(name) {
       S.activeFileName = name;
+      const f = S.files[name];
+      if (!f) return;
 
       // 他ファイルのオーバーレイを非表示
       S.overlayCache.forEach(item => {
@@ -1453,28 +1495,87 @@
         }
       });
 
-      // このファイルのオーバーレイがキャッシュ済みなら表示
-      const cached = S.overlayCache.find(c => c.sourceFile === name);
-      if (cached) {
-        if (!cached.visible) {
-          cached.visible = true;
-          if (cached.leafletLayer) cached.leafletLayer.addTo(S.map);
+      renderFileList();
+
+      const mode = S.lastDisplayMode || 'quick';
+
+      if (mode === 'ndvi') {
+        const redIdx = S.lastRedBandVal ? parseBandVal(S.lastRedBandVal)[1] : 0;
+        const nirIdx = S.lastNirBandVal ? parseBandVal(S.lastNirBandVal)[1] : 1;
+
+        let safeRed = Math.min(redIdx, f.bands - 1);
+        let safeNir = Math.min(nirIdx, f.bands - 1);
+
+        if (safeRed === safeNir) {
+          if (f.bands >= 2) {
+            safeNir = safeRed === 0 ? 1 : 0;
+          } else {
+            setStatus('⚠ 1バンドのためNDVI不可。そのまま表示します。', 'error');
+            await quickDisplay(name);
+            return;
+          }
         }
-        const f = S.files[name];
-        if (f) {
+
+        setStatus('NDVI 計算中...', 'loading');
+        await tick();
+        try {
+          // DOMセレクトも新TIFに合わせて更新（ボタン押下時も同じファイルで計算されるよう）
+          const updateSelect = (id, idx) => {
+            const sel = document.getElementById(id);
+            const target = name + '\x00' + idx;
+            for (let i = 0; i < sel.options.length; i++) {
+              if (sel.options[i].value === target) { sel.selectedIndex = i; break; }
+            }
+          };
+          updateSelect('redBand', safeRed);
+          updateSelect('nirBand', safeNir);
+          checkSameBand();
+          await computeNDVIDirect(name, safeRed, safeNir);
+        } catch(e) {
+          setStatus('エラー: ' + e.message, 'error');
+        }
+
+      } else if (mode === 'single') {
+        // ── 単バンド表示を新しいTIFで再実行 ──
+        const bidx = Math.min(S.lastBandIdxSingle ?? 0, f.bands - 1);
+        const sel = document.getElementById('singleBand');
+        const target = name + '\x00' + bidx;
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === target) { sel.selectedIndex = i; break; }
+        }
+        // カラーマップも復元
+        if (S.lastColormap) {
+          const cmSel = document.getElementById('colormap');
+          for (let i = 0; i < cmSel.options.length; i++) {
+            if (cmSel.options[i].value === S.lastColormap) { cmSel.selectedIndex = i; break; }
+          }
+        }
+        await displaySingle();
+
+      } else {
+        // ── そのまま表示（quickDisplay）──
+        const cached = S.overlayCache.find(c => c.sourceFile === name);
+        if (cached) {
+          if (!cached.visible) {
+            cached.visible = true;
+            if (cached.leafletLayer) cached.leafletLayer.addTo(S.map);
+          }
           S.currentBbox   = [f.reprojBbox.west, f.reprojBbox.south, f.reprojBbox.east, f.reprojBbox.north];
           S.currentWidth  = f.width;
           S.currentHeight = f.height;
           S.currentData   = f.data[0];
-          try { S.map.fitBounds([[f.reprojBbox.south, f.reprojBbox.west],[f.reprojBbox.north, f.reprojBbox.east]]); } catch(_) {}
+          setStatus('✅ 表示切り替え: ' + shortName(name), 'ok');
+        } else {
+          await quickDisplay(name);
         }
-        renderFileList();
-        setStatus('✅ 表示切り替え: ' + shortName(name), 'ok');
-      } else {
-        // 未描画 → 描画して表示
-        renderFileList();
-        await quickDisplay(name);
       }
+
+      try {
+        S.map.fitBounds([
+          [f.reprojBbox.south, f.reprojBbox.west],
+          [f.reprojBbox.north, f.reprojBbox.east]
+        ]);
+      } catch(_) {}
     }
 
     function checkSameBand() {
@@ -1504,6 +1605,16 @@
       const rv = document.getElementById('redBand').value;
       const nv = document.getElementById('nirBand').value;
       if (!rv || !nv) { setStatus('バンドを選択してください', 'error'); return; }
+
+      S.lastDisplayMode = 'ndvi';
+      S.lastRedBandVal  = rv;
+      S.lastNirBandVal  = nv;
+
+      // ボタン押下時もアクティブファイルをセレクトのファイルに更新
+      const [rFile] = parseBandVal(rv);
+      S.activeFileName     = rFile;
+      S._pendingSourceFile = rFile;
+      clearSourceOverlay(rFile);
 
       setStatus('NDVI 計算中...', 'loading');
       document.getElementById('computeBtn').disabled = true;
@@ -1560,6 +1671,10 @@
       const sv = document.getElementById('singleBand').value;
       if (!sv) { setStatus('バンドを選択してください', 'error'); return; }
 
+      S.lastDisplayMode   = 'single';
+      S.lastBandIdxSingle = parseBandVal(sv)[1];
+      S.lastColormap      = document.getElementById('colormap').value;
+
       setStatus('描画中...', 'loading');
       document.getElementById('displayBtn').disabled = true;
       await tick();
@@ -1569,7 +1684,9 @@
         const { data, width, height, reprojBbox, epsg, bands } = S.files[fname];
         const cmap = document.getElementById('colormap').value;
         const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
-        S._pendingLabel = `${shortName(fname)} B${parseInt(bidx)+1} [${cmap}] ${ts}`;
+        S._pendingLabel      = `${shortName(fname)} B${parseInt(bidx)+1} [${cmap}] ${ts}`;
+        S._pendingSourceFile = fname;
+        clearSourceOverlay(fname);
 
         // ── RGB直接表示 ──
         if (cmap === 'rgb') {
@@ -1715,7 +1832,19 @@
       S.overlayCache.push({ id, dataUrl, bounds, label, sourceFile, leafletLayer, visible: true });
       renderCacheList();
       renderFileList();
-      
+    }
+
+    /** 同じ sourceFile の既存オーバーレイを地図とキャッシュから除去 */
+    function clearSourceOverlay(sourceFile) {
+      S.overlayCache = S.overlayCache.filter(item => {
+        if (item.sourceFile === sourceFile || sourceFile === null) {
+          if (item.leafletLayer) {
+            try { S.map.removeLayer(item.leafletLayer); } catch(_) {}
+          }
+          return false;
+        }
+        return true;
+      });
     }
 
     function renderCacheList() {
@@ -1781,8 +1910,6 @@
     function applyColormap(name, t, raw) {
       switch (name) {
         case 'ndvi':
-          if (raw < -0.2) return [100,100,100];
-          if (raw < 0)    return [70,130,210];
           if (raw < 0.2)  return [190,170,120];
           if (raw < 0.4)  return [255,255,180];
           if (raw < 0.6)  return [144,238,144];
@@ -1811,15 +1938,38 @@
       canvas.width = 200;
       const ctx = canvas.getContext('2d');
       const W = canvas.width;
-      for (let x = 0; x < W; x++) {
-        const t = x / (W - 1);
-        const [r, g, b] = applyColormap(cmap, t, mn + t * (mx - mn));
-        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-        ctx.fillRect(x, 0, 1, 12);
+
+      if (cmap === 'ndvi') {
+        // 固定 0〜1 スケールで描画
+        const stops = [
+          { raw: 0.0,  color: [190,170,120] },
+          { raw: 0.2,  color: [255,255,180] },
+          { raw: 0.4,  color: [144,238,144] },
+          { raw: 0.6,  color: [50,205,50]   },
+          { raw: 0.8,  color: [0,100,0]     },
+          { raw: 1.0,  color: [0,100,0]     },
+        ];
+        for (let x = 0; x < W; x++) {
+          const raw = x / (W - 1); // 0〜1
+          const [r,g,b] = applyColormap('ndvi', raw, raw);
+          ctx.fillStyle = 'rgb('+r+','+g+','+b+')';
+          ctx.fillRect(x, 0, 1, 12);
+        }
+        // 目盛: 0, 0.2, 0.4, 0.6, 0.8, 1.0
+        document.getElementById('l-min').textContent = '0.0';
+        document.getElementById('l-mid').textContent = '0.4';
+        document.getElementById('l-max').textContent = '1.0';
+      } else {
+        for (let x = 0; x < W; x++) {
+          const t = x / (W - 1);
+          const [r, g, b] = applyColormap(cmap, t, mn + t * (mx - mn));
+          ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+          ctx.fillRect(x, 0, 1, 12);
+        }
+        document.getElementById('l-min').textContent = mn.toFixed(3);
+        document.getElementById('l-mid').textContent = ((mn + mx) / 2).toFixed(3);
+        document.getElementById('l-max').textContent = mx.toFixed(3);
       }
-      document.getElementById('l-min').textContent = mn.toFixed(3);
-      document.getElementById('l-mid').textContent = ((mn + mx) / 2).toFixed(3);
-      document.getElementById('l-max').textContent = mx.toFixed(3);
     }
 
     function showStats(mn, mx, mean, epsg) {
