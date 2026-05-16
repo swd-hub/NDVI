@@ -527,6 +527,142 @@
     /* ピンモード時マップカーソル */
     #map.pin-mode { cursor: crosshair !important; }
 
+    /* ── ほ場時系列パネル ── */
+    #field-stats-panel {
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 460px;
+      background: var(--card);
+      border-left: 2px solid var(--accent);
+      z-index: 1500;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.13);
+      transform: translateX(100%);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+    }
+    #field-stats-panel.open { transform: translateX(0); }
+
+    .fsp-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .fsp-title {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .fsp-close {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      width: 26px; height: 26px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .fsp-close:hover { background: #fef2f2; border-color: #ef4444; color: #ef4444; }
+
+    .fsp-meta {
+      padding: 7px 14px 4px;
+      font-size: 0.65rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fsp-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px 20px;
+      scrollbar-width: thin;
+    }
+
+    .fsp-section-title {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 14px 0 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .fsp-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+    .fsp-section-title:first-child { margin-top: 0; }
+
+    .fsp-chart-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px;
+      margin-bottom: 4px;
+    }
+
+    .fsp-table-wrap { overflow-x: auto; }
+
+    .fsp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      font-family: var(--mono);
+    }
+    .fsp-table th {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: center;
+      font-weight: 700;
+      color: var(--muted);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .fsp-table th:first-child { text-align: left; }
+    .fsp-table td {
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .fsp-table td:first-child { text-align: left; color: var(--muted); }
+    .fsp-table tr:hover td { background: rgba(5,150,105,0.05); }
+    .fsp-table td.val-high  { color: #16a34a; font-weight: 700; }
+    .fsp-table td.val-mid   { color: #84cc16; font-weight: 600; }
+    .fsp-table td.val-low   { color: #f59e0b; }
+    .fsp-table td.val-neg   { color: #ef4444; }
+    .fsp-table td.val-none  { color: #cbd5e1; font-size: 0.6rem; }
+
+    .fsp-empty {
+      text-align: center;
+      padding: 24px 0;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .fsp-loading {
+      text-align: center;
+      padding: 18px 0;
+      color: var(--blue);
+      font-size: 0.75rem;
+      font-family: var(--mono);
+    }
+
     /* Copernicus info tip */
     .cop-tip {
       background: rgba(59,130,246,0.06);
@@ -755,6 +891,32 @@
     </div>
 
     <div class="map-area">
+      <!-- ── ほ場時系列パネル ── -->
+      <div id="field-stats-panel">
+        <div class="fsp-header">
+          <span>📊</span>
+          <div class="fsp-title" id="fsp-title">ほ場 時系列指数</div>
+          <button class="fsp-close" onclick="closeFieldPanel()" title="閉じる">✕</button>
+        </div>
+        <div class="fsp-meta" id="fsp-meta"></div>
+        <div class="fsp-body">
+          <div class="fsp-section-title">時系列グラフ</div>
+          <div class="fsp-chart-wrap">
+            <canvas id="fsp-chart" height="170"></canvas>
+          </div>
+          <div class="fsp-section-title" style="margin-top:14px;">日付別 指数値</div>
+          <div class="fsp-table-wrap">
+            <div id="fsp-table-container">
+              <div class="fsp-empty">ほ場をクリックすると表示されます</div>
+            </div>
+          </div>
+          <div id="fsp-shape-container" style="display:none; margin-top: 20px; text-align: center; padding-bottom: 20px;">
+            <div class="fsp-section-title" style="margin-top:0; justify-content:center;">対象ポリゴン形状</div>
+            <canvas id="fsp-shape-canvas" style="width: 50%; background: var(--panel); margin: 10px auto; display: block; border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);"></canvas>
+            <div id="fsp-shape-name" style="margin-top: 10px; font-size: 0.8rem; color: var(--accent); font-weight: 700; font-family: var(--sans); background: rgba(5,150,105,0.05); border: 1px solid rgba(5,150,105,0.2); display: inline-block; padding: 6px 12px; border-radius: 6px;"></div>
+          </div>
+        </div>
+      </div>
       <div id="map"></div>
       <div class="map-toolbar">
         <button class="tbtn" id="btn-draw">📐 領域指定 (ヒストグラム)</button>
@@ -1410,7 +1572,8 @@
       const lower = name.toLowerCase();
       const types = ['msavi', 'gndvi', 'ndvi', 'evi', 'savi', 'rvi'];
       for (const t of types) {
-        if (lower.includes(t)) return t.toUpperCase();
+        const regex = new RegExp(`(?:^|[^a-z0-9])${t}(?:[^a-z0-9]|$)`);
+        if (regex.test(lower)) return t.toUpperCase();
       }
       return 'OTHER';
     }
@@ -1550,18 +1713,21 @@
     // =====================================================
     // ファイル名から指数タイプを自動判別
     // =====================================================
-    function autoDetectIndexType() {
+    function autoDetectIndexType(targetFileName) {
       const container = document.getElementById('indexTypeContainer');
       if (!container) return;
 
-      const rv = document.getElementById('redBand')?.value;
-      const nv = document.getElementById('nirBand')?.value;
       let filenames = [];
-      if (rv) filenames.push(parseBandVal(rv)[0]);
-      if (nv) filenames.push(parseBandVal(nv)[0]);
-      
-      if (filenames.length === 0) {
-        filenames = Object.keys(S.files);
+      if (targetFileName) {
+        filenames.push(targetFileName);
+      } else {
+        const rv = document.getElementById('redBand')?.value;
+        const nv = document.getElementById('nirBand')?.value;
+        if (rv) filenames.push(parseBandVal(rv)[0]);
+        if (nv) filenames.push(parseBandVal(nv)[0]);
+        if (filenames.length === 0) {
+          filenames = Object.keys(S.files);
+        }
       }
 
       const types = ['msavi', 'gndvi', 'ndvi', 'evi', 'savi', 'rvi'];
@@ -1570,11 +1736,12 @@
       for (const name of filenames) {
         const lower = name.toLowerCase();
         for (const t of types) {
-          if (lower.includes(t)) {
+          const regex = new RegExp(`(?:^|[^a-z0-9])${t}(?:[^a-z0-9]|$)`);
+          if (regex.test(lower)) {
             const sel = document.getElementById('indexType');
             if (sel && sel.value !== t) {
               sel.value = t;
-              onIndexTypeChange();
+              onIndexTypeChange(true); // フィルタを強制変更しない
             }
             detected = true;
             break;
@@ -1718,7 +1885,7 @@
       const f = S.files[name];
       if (!f) return;
 
-      autoDetectIndexType();
+      autoDetectIndexType(name);
 
       // 他ファイルのオーバーレイを非表示
       S.overlayCache.forEach(item => {
@@ -2507,6 +2674,343 @@
     }
 
     // =====================================================
+    // ほ場ポリゴン時系列分析
+    // =====================================================
+    let _fspChart = null;
+
+    // 点が多角形内にあるか（レイキャスティング法）
+    // ring: [{lat,lng},...] または [[lat,lng],...]
+    function pointInPolygon(lat, lng, ring) {
+      let inside = false;
+      const n = ring.length;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const pi = ring[i], pj = ring[j];
+        const yi = (pi.lat !== undefined) ? pi.lat : pi[0];
+        const xi = (pi.lng !== undefined) ? pi.lng : pi[1];
+        const yj = (pj.lat !== undefined) ? pj.lat : pj[0];
+        const xj = (pj.lng !== undefined) ? pj.lng : pj[1];
+        if (((yi > lat) !== (yj > lat)) &&
+            (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    }
+
+    // ファイル1枚についてポリゴン内ピクセルの平均値を計算
+    function computePolygonMean(fileKey, ring) {
+      const f = S.files[fileKey];
+      if (!f || !f.data || f.data.length === 0) return null;
+      const { west, south, east, north } = f.reprojBbox;
+      if (!isFinite(west)) return null;
+      const W = f.width, H = f.height;
+
+      // ポリゴンのBBox
+      const lats = ring.map(p => (p.lat !== undefined) ? p.lat : p[0]);
+      const lngs = ring.map(p => (p.lng !== undefined) ? p.lng : p[1]);
+      const rMinLat = Math.min(...lats), rMaxLat = Math.max(...lats);
+      const rMinLng = Math.min(...lngs), rMaxLng = Math.max(...lngs);
+
+      // ファイルBBoxとポリゴンBBoxが重なるか確認
+      if (rMaxLat < south || rMinLat > north || rMaxLng < west || rMinLng > east) return null;
+
+      // ピクセルインデックス範囲を絞る
+      const px0 = Math.max(0, Math.floor((rMinLng - west) / (east - west) * W));
+      const px1 = Math.min(W - 1, Math.ceil((rMaxLng - west) / (east - west) * W));
+      const py0 = Math.max(0, Math.floor((north - rMaxLat) / (north - south) * H));
+      const py1 = Math.min(H - 1, Math.ceil((north - rMinLat) / (north - south) * H));
+      if (px0 > px1 || py0 > py1) return null;
+
+      const band = f.data[0]; // 植生指数ファイルは1バンド
+      let sum = 0, cnt = 0;
+      const dLng = (east - west) / W;
+      const dLat = (north - south) / H;
+
+      for (let py = py0; py <= py1; py++) {
+        const lat = north - (py + 0.5) * dLat;
+        for (let px = px0; px <= px1; px++) {
+          const lng = west + (px + 0.5) * dLng;
+          if (pointInPolygon(lat, lng, ring)) {
+            const v = band[py * W + px];
+            if (isFinite(v) && !isNaN(v) && v !== 0) { sum += v; cnt++; }
+          }
+        }
+      }
+      return cnt > 0 ? { mean: sum / cnt, cnt } : null;
+    }
+
+    // 全ファイルを集計して {rows, indices} を返す
+    function buildFieldTimeSeries(ring) {
+      const map = {}; // date -> { NDVI: val, ... }
+      const indicesFound = new Set();
+
+      for (const name in S.files) {
+        const date = getDateFromFilename(name);
+        const idx  = getIndexFromFilename(name);
+        if (idx === 'OTHER') continue;
+
+        const res = computePolygonMean(name, ring);
+        if (!res) continue;
+
+        if (!map[date]) map[date] = { date };
+        map[date][idx]         = res.mean;
+        map[date][idx + '_cnt'] = res.cnt;
+        indicesFound.add(idx);
+      }
+
+      const dates = Object.keys(map).sort();
+      const indices = [...indicesFound].sort();
+      const rows = dates.map(d => map[d]);
+      return { dates, indices, rows };
+    }
+
+    // ほ場クリック時の処理
+    function onFieldPolygonClick(feature, layer) {
+      // ポリゴン外輪を取得
+      let ring = null;
+      try {
+        const ll = layer.getLatLngs();
+        // Polygonは [[{lat,lng},...]] の形
+        ring = ll[0];
+        if (ring[0] && Array.isArray(ring[0])) ring = ring[0]; // MultiPolygon対応
+      } catch(e) { return; }
+      if (!ring || ring.length < 3) return;
+
+      openFieldPanel(feature, ring);
+    }
+
+    function openFieldPanel(feature, ring) {
+      const panel = document.getElementById('field-stats-panel');
+      const titleEl = document.getElementById('fsp-title');
+      const metaEl  = document.getElementById('fsp-meta');
+      const tableEl = document.getElementById('fsp-table-container');
+
+      // タイトル設定
+      let p = feature && feature.properties || {};
+      
+      // ポリゴン内に含まれるピンがあれば、そのプロパティを優先する
+      if (ring && ring.length >= 3) {
+        for (const pin of S.pins) {
+          if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, ring)) {
+            p = { ...p, ...(pin.props || {}) };
+            break;
+          }
+        }
+      }
+
+      const tibanVal = p.Tiban || p.tiban || p['地番'];
+      const addrVal  = p.Address || p.address || p['住所'];
+      const nameVal  = p.name || p.NAME || p['名称'] || p['ほ場名'];
+
+      const titleStr = tibanVal ? '地番: ' + tibanVal
+                     : addrVal ? addrVal
+                     : nameVal || 'ほ場';
+      titleEl.textContent = '📊 ' + titleStr;
+
+      // メタ情報
+      let meta = '';
+      if (p.AreaOnRegistry) meta += '面積: ' + p.AreaOnRegistry + '㎡　';
+      if (p.ClassificationOfLandCodeName) meta += '地目: ' + p.ClassificationOfLandCodeName + '　';
+      if (p.UsageSituationInvestigationResultCodeName) meta += '利用: ' + p.UsageSituationInvestigationResultCodeName;
+      metaEl.textContent = meta || '（プロパティなし）';
+
+      // ローディング表示
+      tableEl.innerHTML = '<div class="fsp-loading">⏳ ピクセル集計中...</div>';
+      panel.classList.add('open');
+
+      // 図形の描画準備
+      const shapeContainer = document.getElementById('fsp-shape-container');
+      const shapeCanvas = document.getElementById('fsp-shape-canvas');
+      const shapeName = document.getElementById('fsp-shape-name');
+      
+      if (shapeContainer && shapeCanvas && shapeName) {
+        shapeContainer.style.display = 'block';
+        
+        let label = '対象:';
+        let val = 'ほ場';
+        if (tibanVal) { label = '地番:'; val = tibanVal; }
+        else if (addrVal) { label = '住所:'; val = addrVal; }
+        else if (nameVal) { label = 'ほ場名:'; val = nameVal; }
+
+        shapeName.innerHTML = '<span style="color:var(--muted);font-size:0.65rem;">' + escHtml(label) + '</span><br><span style="font-size:0.85rem;">' + escHtml(val) + '</span>';
+        drawPolygonShape(shapeCanvas, ring);
+      }
+
+      // 非同期で集計（UIをブロックしないよう setTimeout）
+      setTimeout(() => {
+        const { dates, indices, rows } = buildFieldTimeSeries(ring);
+        renderFieldTable(rows, indices, dates);
+      }, 30);
+    }
+
+    function drawPolygonShape(canvas, ring) {
+      if (!ring || ring.length < 3) return;
+      const ctx = canvas.getContext('2d');
+      
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      ring.forEach(p => {
+        const x = p.lng !== undefined ? p.lng : p[1];
+        const y = p.lat !== undefined ? p.lat : p[0];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      });
+
+      const width = maxX - minX;
+      const height = maxY - minY;
+      
+      const maxSize = 400; // 高解像度で描画してCSSで縮小表示する
+      if (width > height) {
+        canvas.width = maxSize;
+        canvas.height = Math.max(20, maxSize * (height / width));
+      } else {
+        canvas.height = maxSize;
+        canvas.width = Math.max(20, maxSize * (width / height));
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const padding = 20;
+      const drawWidth = canvas.width - padding * 2;
+      const drawHeight = canvas.height - padding * 2;
+      
+      const scaleX = drawWidth / (width || 1);
+      const scaleY = drawHeight / (height || 1);
+
+      ctx.beginPath();
+      ring.forEach((p, i) => {
+        const x = p.lng !== undefined ? p.lng : p[1];
+        const y = p.lat !== undefined ? p.lat : p[0];
+        const cx = padding + (x - minX) * scaleX;
+        const cy = padding + (maxY - y) * scaleY;
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      });
+      ctx.closePath();
+      
+      ctx.fillStyle = 'rgba(5, 150, 105, 0.2)';
+      ctx.fill();
+      ctx.strokeStyle = '#059669';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+
+    function renderFieldTable(rows, indices, dates) {
+      const tableEl = document.getElementById('fsp-table-container');
+
+      if (rows.length === 0) {
+        tableEl.innerHTML = '<div class="fsp-empty">読み込み済みファイルと重なるほ場データがありません。<br>先にTIFを表示してください。</div>';
+        renderFieldChart([], [], []);
+        return;
+      }
+
+      // ── テーブル ──
+      const IDX_COLORS = {
+        NDVI: '#16a34a', EVI: '#3b82f6', SAVI: '#f59e0b',
+        MSAVI: '#8b5cf6', GNDVI: '#06b6d4', RVI: '#ec4899'
+      };
+
+      let html = '<table class="fsp-table"><thead><tr><th>日付</th>';
+      indices.forEach(idx => {
+        html += '<th style="color:' + (IDX_COLORS[idx] || '#64748b') + '">' + idx + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      rows.forEach(row => {
+        html += '<tr><td>' + row.date + '</td>';
+        indices.forEach(idx => {
+          const v = row[idx];
+          if (v === undefined || v === null) {
+            html += '<td class="val-none">—</td>';
+          } else {
+            let cls = 'val-low';
+            if (v >= 0.6) cls = 'val-high';
+            else if (v >= 0.4) cls = 'val-mid';
+            else if (v < 0) cls = 'val-neg';
+            html += '<td class="' + cls + '">' + v.toFixed(4) + '</td>';
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      tableEl.innerHTML = html;
+
+      // ── グラフ ──
+      renderFieldChart(dates, rows, indices);
+    }
+
+    function renderFieldChart(dates, rows, indices) {
+      if (_fspChart) { _fspChart.destroy(); _fspChart = null; }
+      const ctx = document.getElementById('fsp-chart').getContext('2d');
+
+      const IDX_PALETTE = {
+        NDVI:  { border:'#16a34a', bg:'rgba(22,163,74,0.12)' },
+        EVI:   { border:'#3b82f6', bg:'rgba(59,130,246,0.12)' },
+        SAVI:  { border:'#f59e0b', bg:'rgba(245,158,11,0.12)' },
+        MSAVI: { border:'#8b5cf6', bg:'rgba(139,92,246,0.12)' },
+        GNDVI: { border:'#06b6d4', bg:'rgba(6,182,212,0.12)' },
+        RVI:   { border:'#ec4899', bg:'rgba(236,72,153,0.12)' }
+      };
+
+      if (dates.length === 0) {
+        _fspChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels: [], datasets: [] },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } } }
+        });
+        return;
+      }
+
+      const datasets = indices.map(idx => {
+        const pal = IDX_PALETTE[idx] || { border:'#64748b', bg:'rgba(100,116,139,0.1)' };
+        return {
+          label: idx,
+          data: rows.map(r => r[idx] !== undefined ? r[idx] : null),
+          borderColor: pal.border,
+          backgroundColor: pal.bg,
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: pal.border,
+          fill: indices.length === 1,
+          tension: 0.3,
+          spanGaps: true
+        };
+      });
+
+      _fspChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: indices.length > 1,
+              labels: { font: { size: 10 }, boxWidth: 12 }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(4) : '—')
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+            y: { ticks: { font: { size: 10 } }, title: { display: true, text: '指数値', font: { size: 9 } } }
+          }
+        }
+      });
+    }
+
+    function closeFieldPanel() {
+      document.getElementById('field-stats-panel').classList.remove('open');
+    }
+
+    // =====================================================
     // GeoJSON 読み込み（Point → ピン / その他 → レイヤー）
     // =====================================================
     const GEO_COLORS = ['#3b82f6','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
@@ -2548,12 +3052,45 @@
               style: () => ({ color, weight: 2, fillColor: color, fillOpacity: 0 }),
               pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 6, color, fillColor: color, fillOpacity: 0.8, weight: 1.5 }),
               onEachFeature: (feat, lyr) => {
+                // ── クリック → 時系列パネル ──
+                lyr.on('click', function(e) {
+                  L.DomEvent.stopPropagation(e); // マップのピン追加モードに伝播させない
+                  // ポリゴン・ラインのみ（Pointはピンで処理）
+                  const geomType = feat.geometry && feat.geometry.type;
+                  if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+                    onFieldPolygonClick(feat, lyr);
+                  }
+                });
+
+                // ── ポップアップ（プロパティ確認用）──
                 if (feat.properties) {
-                  const rows = Object.entries(feat.properties)
-                    .map(([k, v]) => '<tr><th style="text-align:left;padding:2px 6px;font-weight:bold;font-size:11px">' + escHtml(k) + '</th>' +
-                      '<td style="padding:2px 6px;font-size:11px">' + escHtml(String(v ?? '')) + '</td></tr>')
+                  const p = feat.properties;
+                  const SHOW_KEYS = [
+                    ['Tiban','地番'],['Address','住所'],
+                    ['ClassificationOfLandCodeName','地目'],
+                    ['AreaOnRegistry','登記簿面積(㎡)'],
+                    ['SectionOfNoushinhouCodeName','農振法区分'],
+                    ['UsageSituationInvestigationResultCodeName','利用状況'],
+                    ['KindOfRightCodeName','権利区分'],
+                  ];
+                  let rows = SHOW_KEYS
+                    .filter(([k]) => p[k] != null && p[k] !== '')
+                    .map(([k, label]) => '<tr><th style="text-align:left;padding:2px 8px 2px 0;white-space:nowrap;font-size:11px;color:#64748b">' + label + '</th>' +
+                      '<td style="padding:2px 0;font-size:11px">' + escHtml(String(p[k])) + '</td></tr>')
                     .join('');
-                  lyr.bindPopup('<table style="border-collapse:collapse">' + rows + '</table>', { maxHeight: 240 });
+                  if (!rows) {
+                    rows = Object.entries(p)
+                      .map(([k, v]) => '<tr><th style="text-align:left;padding:2px 6px;font-weight:bold;font-size:11px">' + escHtml(k) + '</th>' +
+                        '<td style="padding:2px 6px;font-size:11px">' + escHtml(String(v ?? '')) + '</td></tr>')
+                      .join('');
+                  }
+                  const hint = (feat.geometry && (feat.geometry.type === 'Polygon' || feat.geometry.type === 'MultiPolygon'))
+                    ? '<div style="margin-top:6px;font-size:10px;color:#059669;font-style:italic;">📊 クリックで時系列指数を表示</div>'
+                    : '';
+                  lyr.bindPopup(
+                    '<table style="border-collapse:collapse">' + rows + '</table>' + hint,
+                    { maxHeight: 280 }
+                  );
                 }
               }
             }).addTo(S.map);
