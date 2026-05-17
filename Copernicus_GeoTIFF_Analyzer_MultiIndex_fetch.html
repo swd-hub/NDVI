@@ -291,6 +291,138 @@
       font-weight: 700;
     }
 
+    /* ── 植生指数説明ボタン ── */
+    .idx-info-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 10px;
+      padding: 7px 11px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 0.68rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .idx-info-btn:hover { background: var(--panel); color: var(--accent); border-color: var(--accent); }
+    .idx-info-btn .ib-icon { font-size: 1rem; }
+
+    /* ── モーダル ── */
+    .idx-modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .idx-modal-overlay.open { display: flex; }
+    .idx-modal {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      width: min(680px, 94vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .idx-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+    .idx-modal-header h2 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+    .idx-modal-close {
+      background: none; border: none;
+      color: #94a3b8; font-size: 1.2rem;
+      cursor: pointer; line-height: 1;
+      padding: 2px 6px; border-radius: 5px;
+    }
+    .idx-modal-close:hover { color: #1e293b; background: #f1f5f9; }
+    /* タブ */
+    .idx-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+    .idx-tab {
+      padding: 9px 14px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: #64748b;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+    .idx-tab:hover { color: #1e293b; }
+    .idx-tab.active { color: #059669; border-bottom-color: #059669; }
+    /* パネル */
+    .idx-panels { overflow-y: auto; flex: 1; padding: 20px 20px 24px; background: #ffffff; }
+    .idx-panel { display: none; }
+    .idx-panel.active { display: block; }
+    .idx-formula {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 7px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      color: #047857;
+      line-height: 1.7;
+    }
+    .idx-panel h3 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin: 0 0 6px;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .idx-badge {
+      font-size: 0.58rem;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+    .idx-panel p { font-size: 0.72rem; color: #475569; line-height: 1.75; margin: 0 0 10px; }
+    .idx-table { width: 100%; border-collapse: collapse; font-size: 0.68rem; margin-top: 12px; }
+    .idx-table th { background: #f1f5f9; color: #64748b; font-weight: 700; padding: 6px 10px; text-align: left; border: 1px solid #e2e8f0; font-family: var(--mono); }
+    .idx-table td { padding: 6px 10px; border: 1px solid #e2e8f0; color: #334155; vertical-align: top; }
+    .idx-table tr:nth-child(even) td { background: #f8fafc; }
+    .idx-tip {
+      margin-top: 14px;
+      padding: 9px 12px;
+      background: #f0fdf4;
+      border-left: 3px solid #059669;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.69rem;
+      color: #1e293b;
+      line-height: 1.7;
+    }
+
     .status {
       border-radius: 6px;
       padding: 9px 11px;
@@ -851,8 +983,145 @@
               <input type="range" id="opacity" min="10" max="100" value="80">
               <span class="opacity-val" id="opacityLabel">80%</span>
             </div>
+
+            <button class="idx-info-btn" onclick="document.getElementById('idxModal').classList.add('open')">
+              <span class="ib-icon">🌿</span>
+              <span>植生指数の役割一覧</span>
+              <span style="margin-left:auto;font-size:0.75rem">▶</span>
+            </button>
           </div>
         </div>
+
+        <!-- ══ 植生指数説明モーダル ══ -->
+        <div class="idx-modal-overlay" id="idxModal" onclick="if(event.target===this)this.classList.remove('open')">
+          <div class="idx-modal">
+            <div class="idx-modal-header">
+              <h2>🌿 植生指数の役割一覧</h2>
+              <button class="idx-modal-close" onclick="document.getElementById('idxModal').classList.remove('open')">✕</button>
+            </div>
+            <div class="idx-tabs">
+              <button class="idx-tab active" onclick="switchIdxTab('ndvi',this)">NDVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('evi',this)">EVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('savi',this)">SAVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('msavi',this)">MSAVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('gndvi',this)">GNDVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('rvi',this)">RVI</button>
+              <button class="idx-tab" onclick="switchIdxTab('summary',this)">まとめ</button>
+            </div>
+            <div class="idx-panels">
+
+              <!-- NDVI -->
+              <div class="idx-panel active" id="idxp-ndvi">
+                <h3>NDVI <span class="idx-badge" style="background:rgba(22,163,74,0.15);color:#16a34a;">正規化差植生指数</span></h3>
+                <div class="idx-formula">(B08 − B04) / (B08 + B04)</div>
+                <p>最も汎用的な植生指数。植生の有無と活性度を示す。値が高いほど植生が密で健全な状態を表す。水面・裸地で低く、樹木・旺盛な作物で高い。農業での生育状況把握に最も広く使われる。</p>
+                <table class="idx-table">
+                  <tr><th>値の範囲</th><th>意味</th></tr>
+                  <tr><td>−1 〜 0</td><td>水面・雲・雪</td></tr>
+                  <tr><td>0 〜 0.2</td><td>裸地・湛水田・建物</td></tr>
+                  <tr><td>0.2 〜 0.4</td><td>疎な植生・収穫後</td></tr>
+                  <tr><td>0.4 〜 0.6</td><td>中程度の植生</td></tr>
+                  <tr><td>0.6 〜 0.8</td><td>活発な植生（生育盛期）</td></tr>
+                  <tr><td>0.8 〜 1.0</td><td>密な樹林・最旺盛期</td></tr>
+                </table>
+                <div class="idx-tip">💡 出雲の水田での活用：田植え〜出穂期の生育モニタリング、収穫時期の判定に最適。</div>
+              </div>
+
+              <!-- EVI -->
+              <div class="idx-panel" id="idxp-evi">
+                <h3>EVI <span class="idx-badge" style="background:rgba(59,130,246,0.15);color:#3b82f6;">強化植生指数</span></h3>
+                <div class="idx-formula">2.5 × (B08 − B04) / (B08 + 6×B04 − 7.5×B02 + 1)</div>
+                <p>NDVIが高密度植生で飽和する弱点を補正した指数。大気の影響（エアロゾル）も低減する。樹林地や高密度な作物で NDVI より精度が高い。青バンド（B02）が必要。</p>
+                <table class="idx-table">
+                  <tr><th>NDVIとの違い</th><th>内容</th></tr>
+                  <tr><td>飽和対策</td><td>NDVI は 0.8 付近で飽和するが EVI は高密度域でも分解能を維持</td></tr>
+                  <tr><td>大気補正</td><td>青バンドを使って煙霞・ヘイズの影響を低減</td></tr>
+                  <tr><td>必要バンド</td><td>B02（青）+ B04（赤）+ B08（NIR）</td></tr>
+                </table>
+                <div class="idx-tip">💡 樹木・竹林など高密度植生の区別、曇りがちな季節の解析に有効。</div>
+              </div>
+
+              <!-- SAVI -->
+              <div class="idx-panel" id="idxp-savi">
+                <h3>SAVI <span class="idx-badge" style="background:rgba(245,158,11,0.15);color:#d97706;">土壌調整植生指数</span></h3>
+                <div class="idx-formula">(B08 − B04) / (B08 + B04 + L) × (1 + L)　　L = 0.5（既定値）</div>
+                <p>裸地・疎な植生での土壌背景の影響を除去する指数。植被率が低い場面で NDVI より正確な値を示す。L は土壌補正係数（0〜1）で、植被率が低いほど大きい値を使う。</p>
+                <table class="idx-table">
+                  <tr><th>L 値の目安</th><th>適した状況</th></tr>
+                  <tr><td>L = 1.0</td><td>裸地が多い（植被率 < 20%）</td></tr>
+                  <tr><td>L = 0.5</td><td>一般的（既定値）</td></tr>
+                  <tr><td>L = 0.25</td><td>植被率が比較的高い</td></tr>
+                  <tr><td>L = 0</td><td>NDVI と同じ</td></tr>
+                </table>
+                <div class="idx-tip">💡 田植え直後・播種初期など植被率が低い時期の生育評価に NDVI より適する。</div>
+              </div>
+
+              <!-- MSAVI -->
+              <div class="idx-panel" id="idxp-msavi">
+                <h3>MSAVI <span class="idx-badge" style="background:rgba(139,92,246,0.15);color:#7c3aed;">修正土壌調整植生指数</span></h3>
+                <div class="idx-formula">(2×B08 + 1 − √((2×B08+1)² − 8×(B08−B04))) / 2</div>
+                <p>SAVI の改良版で L 値を自動調整する。植生密度に応じて補正量が自動で変わるため、初期生育〜成熟期まで同じパラメータで一貫して使える。L 値の手動設定が不要。</p>
+                <table class="idx-table">
+                  <tr><th>SAVIとの比較</th><th>内容</th></tr>
+                  <tr><td>L の扱い</td><td>SAVI は固定値、MSAVI は植生密度に応じて自動変化</td></tr>
+                  <tr><td>精度</td><td>全生育ステージを通じて SAVI より安定</td></tr>
+                  <tr><td>必要バンド</td><td>B04（赤）+ B08（NIR）のみ</td></tr>
+                </table>
+                <div class="idx-tip">💡 田植えから収穫まで一シーズン通じて同じ設定で使いたい場合に最適。</div>
+              </div>
+
+              <!-- GNDVI -->
+              <div class="idx-panel" id="idxp-gndvi">
+                <h3>GNDVI <span class="idx-badge" style="background:rgba(6,182,212,0.15);color:#0891b2;">緑色正規化差植生指数</span></h3>
+                <div class="idx-formula">(B08 − B03) / (B08 + B03)</div>
+                <p>赤バンドの代わりに緑バンド（B03）を使用する。葉緑素濃度・窒素含有量の推定に優れ、NDVI より施肥状態や葉の老化を敏感に検知できる。</p>
+                <table class="idx-table">
+                  <tr><th>NDVIとの違い</th><th>内容</th></tr>
+                  <tr><td>感度</td><td>葉緑素・窒素に対して NDVI の約 2 倍の感度</td></tr>
+                  <tr><td>用途</td><td>施肥管理・精密農業・葉齢推定</td></tr>
+                  <tr><td>飽和</td><td>NDVI より飽和しにくい</td></tr>
+                </table>
+                <div class="idx-tip">💡 稲の追肥判断・窒素管理に活用。NDVI と GNDVI を比較することで施肥ムラを可視化できる。</div>
+              </div>
+
+              <!-- RVI -->
+              <div class="idx-panel" id="idxp-rvi">
+                <h3>RVI <span class="idx-badge" style="background:rgba(236,72,153,0.15);color:#be185d;">比植生指数</span></h3>
+                <div class="idx-formula">B08 / B04</div>
+                <p>最もシンプルな植生指数。植生量の相対比較に使用。値が 1 に近いほど裸地、大きいほど植生が豊か。計算が単純で比較しやすいが、高密度域で飽和しやすい。</p>
+                <table class="idx-table">
+                  <tr><th>値の目安</th><th>状態</th></tr>
+                  <tr><td>〜 2</td><td>裸地・低植生</td></tr>
+                  <tr><td>2 〜 6</td><td>農地・草地</td></tr>
+                  <tr><td>6 〜 10+</td><td>密な樹林・旺盛な植生</td></tr>
+                </table>
+                <div class="idx-tip">💡 植生あり/なしの簡易判定や、複数時期の相対比較に便利。精密解析より概況把握に向く。</div>
+              </div>
+
+              <!-- まとめ -->
+              <div class="idx-panel" id="idxp-summary">
+                <h3>用途別おすすめ指数</h3>
+                <table class="idx-table">
+                  <tr><th>目的・場面</th><th>推奨</th></tr>
+                  <tr><td>生育状況の全体把握</td><td><span style="color:#16a34a;font-weight:700">NDVI</span></td></tr>
+                  <tr><td>田植え直後・初期生育（低植被率）</td><td><span style="color:#d97706;font-weight:700">SAVI / MSAVI</span></td></tr>
+                  <tr><td>施肥状態・葉緑素・窒素管理</td><td><span style="color:#0891b2;font-weight:700">GNDVI</span></td></tr>
+                  <tr><td>樹林地・高密度植生の区別</td><td><span style="color:#3b82f6;font-weight:700">EVI</span></td></tr>
+                  <tr><td>複数時期の簡易比較</td><td><span style="color:#be185d;font-weight:700">RVI</span></td></tr>
+                  <tr><td>1シーズン通じて安定した評価</td><td><span style="color:#7c3aed;font-weight:700">MSAVI</span></td></tr>
+                </table>
+                <div class="idx-tip" style="margin-top:16px">
+                  💡 <strong>出雲・斐川の水田管理での組み合わせ例：</strong><br>
+                  田植え時期 → <strong>SAVI</strong>（湛水・低植被率に対応）<br>
+                  生育盛期 → <strong>NDVI</strong>（生育量の把握）<br>
+                  追肥判断 → <strong>GNDVI</strong>（葉緑素・窒素を感知）<br>
+                  シーズン通し → <strong>MSAVI</strong>（自動補正で安定）
+                </div>
+              </div>
+
+            </div><!-- /idx-panels -->
+          </div><!-- /idx-modal -->
+        </div><!-- /idx-modal-overlay -->
 
         <div class="status" id="status">✦ Analytical TIF ファイルを読み込んでください</div>
 
@@ -2747,6 +3016,14 @@
 
       S.pins.push({ id, latlng, marker, ndvi, props, label });
       renderPinList();
+    }
+
+    // ── 植生指数説明タブ切り替え ──
+    function switchIdxTab(id, btn) {
+      document.querySelectorAll('.idx-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.idx-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('idxp-' + id).classList.add('active');
+      btn.classList.add('active');
     }
 
     function removePin(id) {
