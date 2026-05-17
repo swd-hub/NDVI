@@ -732,7 +732,7 @@
 
           <!-- フィルタUI -->
           <div style="display:flex;gap:4px;margin-bottom:8px;">
-            <select id="filterDate" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:5px;font-size:0.7rem;color:var(--text);outline:none;" onchange="renderFileList()">
+            <select id="filterDate" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:5px;font-size:0.7rem;color:var(--text);outline:none;" onchange="onFilterDateChange()">
               <option value="">📅 全ての日付</option>
             </select>
             <select id="filterIndex" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:5px;font-size:0.7rem;color:var(--text);outline:none;" onchange="onFilterIndexChange()">
@@ -1469,6 +1469,15 @@
         document.getElementById('sec-band').style.display = '';
         setStatus(Object.keys(S.files).length + ' 件のファイルが読み込まれました', 'ok');
 
+        // 日付が1つしかない場合は自動選択する
+        const dateSel = document.getElementById('filterDate');
+        if (dateSel && dateSel.options.length === 2) {
+          dateSel.selectedIndex = 1;
+          onFilterDateChange();
+        } else {
+          autoSelectBands();
+        }
+
         // 1ファイルでバンド数 >= 3 → 単バンドRGB表示モードをデフォルトに
         const names = Object.keys(S.files);
         if (names.length === 1 && S.files[names[0]].bands >= 3) {
@@ -1580,10 +1589,11 @@
 
     function updateFilterOptions() {
       const dates = new Set();
-      const indices = new Set();
+      const indices = new Set(['NDVI', 'EVI', 'SAVI', 'MSAVI', 'GNDVI', 'RVI']);
       for (const name in S.files) {
         dates.add(getDateFromFilename(name));
-        indices.add(getIndexFromFilename(name));
+        const idx = getIndexFromFilename(name);
+        if (idx !== 'OTHER') indices.add(idx);
       }
       
       const dateSel = document.getElementById('filterDate');
@@ -1594,9 +1604,77 @@
 
       const idxSel = document.getElementById('filterIndex');
       const oldIdx = idxSel.value;
-      idxSel.innerHTML = '<option value="">📊 全ての指数</option>';
+      idxSel.innerHTML = '';
       Array.from(indices).sort().forEach(i => idxSel.appendChild(new Option(i, i)));
-      if (indices.has(oldIdx)) idxSel.value = oldIdx;
+      if (indices.has(oldIdx)) {
+        idxSel.value = oldIdx;
+      } else if (idxSel.options.length > 0) {
+        if (indices.has('NDVI')) idxSel.value = 'NDVI';
+        else idxSel.selectedIndex = 0;
+      }
+    }
+
+    function onFilterDateChange() {
+      renderFileList();
+      autoSelectBands();
+    }
+
+    function autoSelectBands() {
+      const dateSel = document.getElementById('filterDate');
+      const targetDate = dateSel ? dateSel.value : '';
+      if (!targetDate) return;
+
+      const indexType = document.getElementById('indexType').value;
+      
+      const dateFiles = Object.keys(S.files).filter(name => getDateFromFilename(name) === targetDate);
+      if (dateFiles.length === 0) return;
+
+      let b02_file = null, b03_file = null, b04_file = null, b08_file = null;
+      for (const name of dateFiles) {
+        if (name.includes('_B02_')) b02_file = name;
+        if (name.includes('_B03_')) b03_file = name;
+        if (name.includes('_B04_')) b04_file = name;
+        if (name.includes('_B08_')) b08_file = name;
+      }
+
+      if (b04_file || b08_file) {
+        switchMode('ndvi');
+      }
+
+      const setSelectValue = (selectId, fileName) => {
+        if (!fileName) return;
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value.startsWith(fileName + '\x00')) {
+            sel.selectedIndex = i;
+            break;
+          }
+        }
+      };
+
+      setSelectValue('nirBand', b08_file);
+      setSelectValue('redBand', b04_file);
+      if (indexType === 'evi') {
+        setSelectValue('blueBand', b02_file);
+      } else if (indexType === 'gndvi') {
+        setSelectValue('greenBand', b03_file);
+      }
+
+      if (typeof checkSameBand === 'function') checkSameBand();
+      if (typeof updateBandLabel === 'function') {
+        updateBandLabel('redBand', 'redLabel');
+        updateBandLabel('nirBand', 'nirLabel');
+        updateBandLabel('blueBand', 'blueLabel');
+        updateBandLabel('greenBand', 'greenLabel');
+      }
+
+      if (b04_file && b08_file) {
+        setTimeout(() => {
+          const computeBtn = document.getElementById('computeBtn');
+          if (computeBtn && !computeBtn.disabled) computeBtn.click();
+        }, 50);
+      }
     }
 
     function onFilterIndexChange() {
@@ -1616,6 +1694,7 @@
         }
       }
       renderFileList();
+      autoSelectBands();
     }
 
     function renderFileList() {
@@ -1630,7 +1709,7 @@
         const idx = getIndexFromFilename(name);
 
         if (filterDate && filterDate !== d) continue;
-        if (filterIndex && filterIndex !== idx) continue;
+        if (filterIndex && filterIndex !== idx && idx !== 'OTHER') continue;
 
         const f = S.files[name];
         const isActive = name === S.activeFileName;
@@ -1641,12 +1720,18 @@
         li.title = name;
 
         // ── ラジオボタン ──
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = 'tif-select';
-        radio.checked = isActive;
-        radio.style.cssText = 'accent-color:var(--accent);flex-shrink:0;cursor:pointer;width:14px;height:14px;margin:0;';
-        radio.addEventListener('change', () => switchToTif(name));
+        const controlArea = document.createElement('div');
+        controlArea.style.width = '14px';
+        controlArea.style.flexShrink = '0';
+        if (idx !== 'OTHER') {
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'tif-select';
+          radio.checked = isActive;
+          radio.style.cssText = 'accent-color:var(--accent);cursor:pointer;width:14px;height:14px;margin:0;display:block;';
+          radio.addEventListener('change', () => switchToTif(name));
+          controlArea.appendChild(radio);
+        }
 
         const info = document.createElement('div');
         info.className = 'file-item-info';
@@ -1660,7 +1745,7 @@
         btn.textContent = '✕';
         btn.title = '削除';
 
-        li.appendChild(radio);
+        li.appendChild(controlArea);
         li.appendChild(info);
         li.appendChild(btn);
         ul.appendChild(li);
@@ -2015,6 +2100,8 @@
           }
         }
       }
+      
+      autoSelectBands();
     }
 
     // 現在の指数名を返す
