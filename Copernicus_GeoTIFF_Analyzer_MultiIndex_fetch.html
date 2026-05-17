@@ -743,6 +743,29 @@
           <ul class="file-list" id="fileList"></ul>
         </div>
 
+        <div id="sec-auto" style="display:none;">
+          <div class="sh">📅 日付 × 指数 自動計算</div>
+          <div class="cfg">
+            <label style="font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px;">撮影日付</label>
+            <select id="autoDate" onchange="updateAutoBandInfo()" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 9px;font-size:0.75rem;outline:none;margin-bottom:8px;">
+              <option value="">-- 日付を選択 --</option>
+            </select>
+            <label style="font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px;">指数タイプ</label>
+            <select id="autoIndexType" onchange="updateAutoBandInfo()" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 9px;font-size:0.75rem;outline:none;margin-bottom:8px;">
+              <option value="ndvi">NDVI — B08, B04</option>
+              <option value="evi">EVI — B08, B04, B02</option>
+              <option value="savi">SAVI — B08, B04</option>
+              <option value="msavi">MSAVI — B08, B04</option>
+              <option value="gndvi">GNDVI — B08, B03</option>
+              <option value="rvi">RVI — B08, B04</option>
+            </select>
+            <div id="autoBandInfo" style="font-size:0.68rem;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:7px 10px;margin-bottom:8px;font-family:var(--mono);line-height:1.8;color:var(--muted);">
+              日付を選択するとバンド状況を表示します
+            </div>
+            <button class="btn-run" onclick="autoSelectAndCompute()">🧮 バンド自動選択して計算</button>
+          </div>
+        </div>
+
         <div id="sec-band" style="display:none;">
           <div class="sh">表示設定</div>
           <div class="cfg">
@@ -1467,6 +1490,7 @@
         refreshSelects();
         autoDetectIndexType();
         document.getElementById('sec-band').style.display = '';
+        updateAutoDateSelect(); // 生バンドTIFF用: 日付×指数パネルを更新
         setStatus(Object.keys(S.files).length + ' 件のファイルが読み込まれました', 'ok');
 
         // 日付が1つしかない場合は自動選択する
@@ -2826,23 +2850,324 @@
       return cnt > 0 ? { mean: sum / cnt, cnt } : null;
     }
 
+    // =====================================================
+    // ファイル名から生バンド名を取得 (B02/B03/B04/B08 等)
+    // 例: "...Sentinel-2_L2A_B04_(Raw).tiff" → "B04"
+    // =====================================================
+    function getBandFromFilename(name) {
+      const m = name.match(/_L2A_(B\d+[A-Z]?)_?\(Raw\)/i);
+      return m ? m[1].toUpperCase() : null;
+    }
+
+    // =====================================================
+    // 生バンドファイル (B04/B08等) から指定指数をポリゴン内計算
+    // =====================================================
+    function computePolygonIndexFromRaw(date, indexType, ring) {
+      const BAND_NEEDS = {
+        ndvi:  { red:'B04', nir:'B08' },
+        evi:   { red:'B04', nir:'B08', blue:'B02' },
+        savi:  { red:'B04', nir:'B08' },
+        msavi: { red:'B04', nir:'B08' },
+        gndvi: { green:'B03', nir:'B08' },
+        rvi:   { red:'B04', nir:'B08' },
+      };
+      const needs = BAND_NEEDS[indexType] || BAND_NEEDS.ndvi;
+
+      // この日付の生バンドファイルを収集
+      const bandFiles = {};
+      for (const name of Object.keys(S.files)) {
+        if (getDateFromFilename(name) !== date) continue;
+        const b = getBandFromFilename(name);
+        if (b) bandFiles[b] = S.files[name];
+      }
+
+      // 必要バンド確認
+      const fNir   = needs.nir   ? bandFiles[needs.nir]   : null;
+      const fRed   = needs.red   ? bandFiles[needs.red]   : null;
+      const fBlue  = needs.blue  ? bandFiles[needs.blue]  : null;
+      const fGreen = needs.green ? bandFiles[needs.green] : null;
+      if (!fNir) return null;
+      if (needs.red   && !fRed)   return null;
+      if (needs.blue  && !fBlue)  return null;
+      if (needs.green && !fGreen) return null;
+
+      const { west, south, east, north } = fNir.reprojBbox;
+      if (!isFinite(west)) return null;
+      const W = fNir.width, H = fNir.height;
+
+      // ポリゴンBBox
+      const lats = ring.map(p => (p.lat !== undefined) ? p.lat : p[0]);
+      const lngs = ring.map(p => (p.lng !== undefined) ? p.lng : p[1]);
+      const rMinLat = Math.min(...lats), rMaxLat = Math.max(...lats);
+      const rMinLng = Math.min(...lngs), rMaxLng = Math.max(...lngs);
+      if (rMaxLat < south || rMinLat > north || rMaxLng < west || rMinLng > east) return null;
+
+      const px0 = Math.max(0, Math.floor((rMinLng - west) / (east - west) * W));
+      const px1 = Math.min(W-1, Math.ceil((rMaxLng - west) / (east - west) * W));
+      const py0 = Math.max(0, Math.floor((north - rMaxLat) / (north - south) * H));
+      const py1 = Math.min(H-1, Math.ceil((north - rMinLat) / (north - south) * H));
+      if (px0 > px1 || py0 > py1) return null;
+
+      const nirD   = fNir.data[0];
+      const redD   = fRed   ? fRed.data[0]   : null;
+      const blueD  = fBlue  ? fBlue.data[0]  : null;
+      const greenD = fGreen ? fGreen.data[0] : null;
+      const L      = parseFloat(document.getElementById('saviL')?.value) || 0.5;
+      const dLng   = (east - west) / W;
+      const dLat   = (north - south) / H;
+
+      let sum = 0, cnt = 0;
+      for (let py = py0; py <= py1; py++) {
+        const lat = north - (py + 0.5) * dLat;
+        for (let px = px0; px <= px1; px++) {
+          const lng = west + (px + 0.5) * dLng;
+          if (!pointInPolygon(lat, lng, ring)) continue;
+          const i  = py * W + px;
+          const ni = nirD[i];
+          const r  = redD   ? redD[i]   : 0;
+          const bl = blueD  ? blueD[i]  : 0;
+          const gr = greenD ? greenD[i] : 0;
+          if (r === 0 && ni === 0) continue; // nodata
+          let v;
+          switch(indexType) {
+            case 'ndvi':  { const d=ni+r;          v=d===0?0:(ni-r)/d; break; }
+            case 'evi':   { const d=ni+6*r-7.5*bl+1; v=d===0?0:2.5*(ni-r)/d; v=Math.max(-1,Math.min(2,v)); break; }
+            case 'savi':  { const d=ni+r+L;        v=d===0?0:(ni-r)/d*(1+L); break; }
+            case 'msavi': { const k=(2*ni+1)**2-8*(ni-r); v=k<0?0:(2*ni+1-Math.sqrt(k))/2; break; }
+            case 'gndvi': { const d=ni+gr;         v=d===0?0:(ni-gr)/d; break; }
+            case 'rvi':   { v=r===0?0:ni/r; break; }
+            default:      { const d=ni+r;          v=d===0?0:(ni-r)/d; }
+          }
+          if (!isFinite(v) || isNaN(v)) continue;
+          sum += v; cnt++;
+        }
+      }
+      return cnt > 0 ? { mean: sum/cnt, cnt } : null;
+    }
+
+    // =====================================================
+    // ファイル名から生バンド名を取得 (B02/B03/B04/B08 等)
+    // 例: "...Sentinel-2_L2A_B04_(Raw).tiff" → "B04"
+    // =====================================================
+    function getBandFromFilename(name) {
+      const m = name.match(/_L2A_(B\d+[A-Z]?)_?\(Raw\)/i);
+      return m ? m[1].toUpperCase() : null;
+    }
+
+    // autoDate セレクトを更新
+    function updateAutoDateSelect() {
+      const sel = document.getElementById('autoDate');
+      if (!sel) return;
+      const dates = new Set();
+      for (const name of Object.keys(S.files)) {
+        if (getBandFromFilename(name)) dates.add(getDateFromFilename(name));
+      }
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">-- 日付を選択 --</option>';
+      Array.from(dates).sort().forEach(d => sel.appendChild(new Option(d, d)));
+      if (prev && dates.has(prev)) sel.value = prev;
+      else if (dates.size === 1) sel.selectedIndex = 1;
+      const panel = document.getElementById('sec-auto');
+      if (panel) panel.style.display = dates.size > 0 ? '' : 'none';
+      updateAutoBandInfo();
+    }
+
+    // バンド状況をパネルに表示
+    function updateAutoBandInfo() {
+      const el = document.getElementById('autoBandInfo');
+      if (!el) return;
+      const date = document.getElementById('autoDate')?.value;
+      const indexType = document.getElementById('autoIndexType')?.value || 'ndvi';
+      if (!date) { el.innerHTML = '<span style="color:var(--muted)">日付を選択するとバンド状況を表示します</span>'; return; }
+      const BAND_NEEDS = {
+        ndvi:  { '赤 B04':'B04', 'NIR B08':'B08' },
+        evi:   { '青 B02':'B02', '赤 B04':'B04', 'NIR B08':'B08' },
+        savi:  { '赤 B04':'B04', 'NIR B08':'B08' },
+        msavi: { '赤 B04':'B04', 'NIR B08':'B08' },
+        gndvi: { '緑 B03':'B03', 'NIR B08':'B08' },
+        rvi:   { '赤 B04':'B04', 'NIR B08':'B08' },
+      };
+      const needs = BAND_NEEDS[indexType] || {};
+      const bandFile = {};
+      for (const name of Object.keys(S.files)) {
+        if (getDateFromFilename(name) !== date) continue;
+        const b = getBandFromFilename(name);
+        if (b) bandFile[b] = name;
+      }
+      el.innerHTML = Object.entries(needs).map(([label, band]) =>
+        (bandFile[band] ? '✅ ' : '❌ ') + label
+      ).join('<br>') || '—';
+    }
+
+    // 日付×指数 自動バンド選択して計算
+    function autoSelectAndCompute() {
+      const date = document.getElementById('autoDate').value;
+      const indexType = document.getElementById('autoIndexType').value;
+      if (!date) { setStatus('⚠ 日付を選択してください', 'error'); return; }
+      const BAND_NEEDS = {
+        ndvi:  { red:'B04', nir:'B08' },
+        evi:   { red:'B04', nir:'B08', blue:'B02' },
+        savi:  { red:'B04', nir:'B08' },
+        msavi: { red:'B04', nir:'B08' },
+        gndvi: { green:'B03', nir:'B08' },
+        rvi:   { red:'B04', nir:'B08' },
+      };
+      const needs = BAND_NEEDS[indexType] || BAND_NEEDS.ndvi;
+      const bandFile = {};
+      for (const name of Object.keys(S.files)) {
+        if (getDateFromFilename(name) !== date) continue;
+        const b = getBandFromFilename(name);
+        if (b) bandFile[b] = name;
+      }
+      const missing = [];
+      if (needs.red   && !bandFile[needs.red])   missing.push(needs.red);
+      if (needs.nir   && !bandFile[needs.nir])   missing.push(needs.nir);
+      if (needs.blue  && !bandFile[needs.blue])  missing.push(needs.blue);
+      if (needs.green && !bandFile[needs.green]) missing.push(needs.green);
+      if (missing.length) { setStatus('⚠ 不足バンド: ' + missing.join(', '), 'error'); return; }
+
+      const itSel = document.getElementById('indexType');
+      if (itSel) { itSel.value = indexType; onIndexTypeChange(); }
+
+      const setSelect = (selId, bandName) => {
+        if (!bandName || !bandFile[bandName]) return;
+        const target = bandFile[bandName] + '\x00' + 0;
+        const sel = document.getElementById(selId);
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === target) { sel.selectedIndex = i; break; }
+        }
+        const lblId = selId.replace('Band','Label');
+        updateBandLabel(selId, lblId);
+      };
+      setSelect('redBand',   needs.red);
+      setSelect('nirBand',   needs.nir);
+      setSelect('blueBand',  needs.blue);
+      setSelect('greenBand', needs.green);
+      S.lastRedBandVal = document.getElementById('redBand').value;
+      S.lastNirBandVal = document.getElementById('nirBand').value;
+      checkSameBand();
+      switchMode('ndvi');
+      const iNames = {ndvi:'NDVI',evi:'EVI',savi:'SAVI',msavi:'MSAVI',gndvi:'GNDVI',rvi:'RVI'};
+      setStatus(`${iNames[indexType]||'指数'} 計算中 [${date}]...`, 'loading');
+      setTimeout(() => computeNDVI(), 30);
+    }
+
+    // =====================================================
+    // 生バンドファイル (B04/B08等) から指定指数をポリゴン内計算
+    // =====================================================
+    function computePolygonIndexFromRaw(date, indexType, ring) {
+      const BAND_NEEDS = {
+        ndvi:  { red:'B04', nir:'B08' },
+        evi:   { red:'B04', nir:'B08', blue:'B02' },
+        savi:  { red:'B04', nir:'B08' },
+        msavi: { red:'B04', nir:'B08' },
+        gndvi: { green:'B03', nir:'B08' },
+        rvi:   { red:'B04', nir:'B08' },
+      };
+      const needs = BAND_NEEDS[indexType] || BAND_NEEDS.ndvi;
+      const bandFiles = {};
+      for (const name of Object.keys(S.files)) {
+        if (getDateFromFilename(name) !== date) continue;
+        const b = getBandFromFilename(name);
+        if (b) bandFiles[b] = S.files[name];
+      }
+      const fNir   = needs.nir   ? bandFiles[needs.nir]   : null;
+      const fRed   = needs.red   ? bandFiles[needs.red]   : null;
+      const fBlue  = needs.blue  ? bandFiles[needs.blue]  : null;
+      const fGreen = needs.green ? bandFiles[needs.green] : null;
+      if (!fNir) return null;
+      if (needs.red   && !fRed)   return null;
+      if (needs.blue  && !fBlue)  return null;
+      if (needs.green && !fGreen) return null;
+
+      const { west, south, east, north } = fNir.reprojBbox;
+      if (!isFinite(west)) return null;
+      const W = fNir.width, H = fNir.height;
+      const lats = ring.map(p => (p.lat !== undefined) ? p.lat : p[0]);
+      const lngs = ring.map(p => (p.lng !== undefined) ? p.lng : p[1]);
+      const rMinLat = Math.min(...lats), rMaxLat = Math.max(...lats);
+      const rMinLng = Math.min(...lngs), rMaxLng = Math.max(...lngs);
+      if (rMaxLat < south || rMinLat > north || rMaxLng < west || rMinLng > east) return null;
+
+      const px0 = Math.max(0, Math.floor((rMinLng-west)/(east-west)*W));
+      const px1 = Math.min(W-1, Math.ceil((rMaxLng-west)/(east-west)*W));
+      const py0 = Math.max(0, Math.floor((north-rMaxLat)/(north-south)*H));
+      const py1 = Math.min(H-1, Math.ceil((north-rMinLat)/(north-south)*H));
+      if (px0 > px1 || py0 > py1) return null;
+
+      const nirD   = fNir.data[0];
+      const redD   = fRed   ? fRed.data[0]   : null;
+      const blueD  = fBlue  ? fBlue.data[0]  : null;
+      const greenD = fGreen ? fGreen.data[0] : null;
+      const L = parseFloat(document.getElementById('saviL')?.value) || 0.5;
+      const dLng = (east-west)/W, dLat = (north-south)/H;
+      let sum = 0, cnt = 0;
+
+      for (let py = py0; py <= py1; py++) {
+        const lat = north - (py+0.5)*dLat;
+        for (let px = px0; px <= px1; px++) {
+          const lng = west + (px+0.5)*dLng;
+          if (!pointInPolygon(lat, lng, ring)) continue;
+          const i = py*W+px;
+          const ni=nirD[i], r=redD?redD[i]:0, bl=blueD?blueD[i]:0, gr=greenD?greenD[i]:0;
+          if (r===0 && ni===0) continue;
+          let v;
+          switch(indexType) {
+            case 'ndvi':  { const d=ni+r; v=d===0?0:(ni-r)/d; break; }
+            case 'evi':   { const d=ni+6*r-7.5*bl+1; v=d===0?0:2.5*(ni-r)/d; v=Math.max(-1,Math.min(2,v)); break; }
+            case 'savi':  { const d=ni+r+L; v=d===0?0:(ni-r)/d*(1+L); break; }
+            case 'msavi': { const k=(2*ni+1)**2-8*(ni-r); v=k<0?0:(2*ni+1-Math.sqrt(k))/2; break; }
+            case 'gndvi': { const d=ni+gr; v=d===0?0:(ni-gr)/d; break; }
+            case 'rvi':   { v=r===0?0:ni/r; break; }
+            default:      { const d=ni+r; v=d===0?0:(ni-r)/d; }
+          }
+          if (!isFinite(v)||isNaN(v)) continue;
+          sum+=v; cnt++;
+        }
+      }
+      return cnt>0 ? {mean:sum/cnt, cnt} : null;
+    }
+
     // 全ファイルを集計して {rows, indices} を返す
     function buildFieldTimeSeries(ring) {
       const map = {}; // date -> { NDVI: val, ... }
       const indicesFound = new Set();
 
+      // ── ① 計算済み指数ファイル（_NDVI.tiff 等）──
       for (const name in S.files) {
         const date = getDateFromFilename(name);
         const idx  = getIndexFromFilename(name);
         if (idx === 'OTHER') continue;
-
         const res = computePolygonMean(name, ring);
         if (!res) continue;
-
         if (!map[date]) map[date] = { date };
-        map[date][idx]         = res.mean;
+        map[date][idx]          = res.mean;
         map[date][idx + '_cnt'] = res.cnt;
         indicesFound.add(idx);
+      }
+
+      // ── ② 生バンドファイル (B04/B08等) から指数を計算 ──
+      // 使用する指数: autoIndexType → indexType セレクタの順で参照
+      const indexType = document.getElementById('autoIndexType')?.value
+                     || document.getElementById('indexType')?.value
+                     || 'ndvi';
+      const indexName = indexType.toUpperCase();
+
+      // 生バンドが存在する日付を抽出
+      const rawDates = new Set();
+      for (const name of Object.keys(S.files)) {
+        if (getBandFromFilename(name)) rawDates.add(getDateFromFilename(name));
+      }
+
+      for (const date of rawDates) {
+        // 既に同じ指数が計算済みならスキップ
+        if (map[date] && map[date][indexName] !== undefined) continue;
+        const res = computePolygonIndexFromRaw(date, indexType, ring);
+        if (!res) continue;
+        if (!map[date]) map[date] = { date };
+        map[date][indexName]          = res.mean;
+        map[date][indexName + '_cnt'] = res.cnt;
+        indicesFound.add(indexName);
       }
 
       const dates = Object.keys(map).sort();
@@ -2987,7 +3312,12 @@
       const tableEl = document.getElementById('fsp-table-container');
 
       if (rows.length === 0) {
-        tableEl.innerHTML = '<div class="fsp-empty">読み込み済みファイルと重なるほ場データがありません。<br>先にTIFを表示してください。</div>';
+        // 生バンドは読み込まれているがポリゴンと重ならない場合
+        const hasRaw = Object.keys(S.files).some(n => getBandFromFilename(n));
+        const msg = hasRaw
+          ? '読み込み済みのTIFファイルとほ場の位置が重なっていません。<br>地図範囲とGeoJSONのCRSをご確認ください。'
+          : 'TIFファイルが読み込まれていません。<br>先にB04・B08等のRawバンドTIFを読み込んでください。';
+        tableEl.innerHTML = '<div class="fsp-empty">' + msg + '</div>';
         renderFieldChart([], [], []);
         return;
       }
