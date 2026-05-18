@@ -93,7 +93,37 @@
       overflow: hidden;
       flex-shrink: 0;
       position: relative;
+      transition: width 0.22s ease, min-width 0.22s ease;
     }
+    .side.collapsed {
+      width: 0 !important;
+      min-width: 0 !important;
+      border-right: none;
+      overflow: hidden;
+    }
+    /* サイドバートグルボタン */
+    #sidebarToggleBtn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      left: 0;
+      z-index: 1100;
+      width: 18px;
+      height: 48px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: var(--muted);
+      box-shadow: 2px 0 6px rgba(0,0,0,0.08);
+      transition: background 0.15s, color 0.15s, left 0.22s ease;
+    }
+    #sidebarToggleBtn:hover { background: #f0fdf4; color: var(--accent); }
 
     .side-scroll {
       flex: 1;
@@ -812,10 +842,21 @@
 <body>
 
   <header>
+    <button id="sidebarHeaderBtn" onclick="toggleSidebar()" title="操作パネル 表示/非表示"
+      style="background:none;border:1px solid var(--border);border-radius:5px;padding:4px 8px;
+             font-size:0.8rem;cursor:pointer;color:var(--muted);transition:all .15s;flex-shrink:0;"
+      onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
+      onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">◀</button>
     <span class="sat">🛰️</span>
     <h1>植生指数 GeoTIFF Analyzer <em>[Copernicus Edition]</em></h1>
     <div class="hbadge" style="display:flex;align-items:center;gap:10px;">
       <span id="lib-status" style="color:#aaa;">ライブラリ読込中...</span>
+      <button id="fsBtn" onclick="toggleFullscreen()" title="全画面表示 (F11)"
+        style="background:none;border:1px solid var(--border);border-radius:5px;
+               padding:4px 9px;font-size:0.82rem;cursor:pointer;color:var(--muted);
+               transition:all .15s;flex-shrink:0;"
+        onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
+        onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">⛶</button>
       <a href="https://browser.dataspace.copernicus.eu/"
          target="_blank" rel="noopener"
          style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
@@ -872,6 +913,10 @@
             </select>
           </div>
 
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <span id="fileListCountLabel" style="font-size:0.65rem;color:var(--muted);font-family:var(--mono);"></span>
+            <button id="fileListToggleBtn" onclick="toggleFileList()" style="font-size:0.65rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;" title="ファイル一覧 表示/非表示">🙈 非表示</button>
+          </div>
           <ul class="file-list" id="fileList"></ul>
         </div>
 
@@ -952,7 +997,7 @@
               <div id="saviRow" style="display:none;margin-bottom:4px;">
                 <label>土壌係数 L（SAVIのみ）</label>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <input type="range" id="saviL" min="0" max="1" step="0.05" value="0.5" style="flex:1;accent-color:var(--accent);" oninput="document.getElementById('saviLVal').textContent=parseFloat(this.value).toFixed(2)">
+                  <input type="range" id="saviL" min="0" max="1" step="0.05" value="0.5" style="flex:1;accent-color:var(--accent);" oninput="document.getElementById('saviLVal').textContent=parseFloat(this.value).toFixed(2)" onchange="if(document.getElementById('indexType').value==='savi'&&document.getElementById('redBand').value&&document.getElementById('nirBand').value)computeNDVI()">
                   <span id="saviLVal" style="font-family:var(--mono);font-size:0.75rem;color:var(--accent);font-weight:700;min-width:32px;">0.50</span>
                 </div>
               </div>
@@ -1182,7 +1227,8 @@
       <div class="resizer" id="resizer"></div>
     </div>
 
-    <div class="map-area">
+    <div class="map-area" style="position:relative;">
+      <button id="sidebarToggleBtn" onclick="toggleSidebar()" title="操作パネル 表示/非表示">◀</button>
       <!-- ── ほ場時系列パネル ── -->
       <div id="field-stats-panel">
         <div class="fsp-header">
@@ -1218,7 +1264,7 @@
       <div class="map-legend" id="map-legend" style="display:none">
         <div class="leg-title" id="leg-title">指数値</div>
         <canvas id="leg-canvas" height="12" style="width:100%; border-radius:4px; margin-bottom:4px;"></canvas>
-        <div class="leg-labels"><span id="l-min">—</span><span id="l-mid">—</span><span id="l-max">—</span></div>
+        <div class="leg-labels"><span id="l-0">—</span><span id="l-1">—</span><span id="l-2">—</span><span id="l-3">—</span><span id="l-4">—</span></div>
       </div>
       <div class="map-info-bar">
         <span>データ: <span class="cl">Copernicus Analytical TIF</span></span>
@@ -1713,6 +1759,46 @@
       btn.disabled = false;
     }
 
+    // =====================================================
+    // サイドバー 表示/非表示トグル
+    // =====================================================
+    let _sidebarVisible = true;
+    function toggleSidebar() {
+      _sidebarVisible = !_sidebarVisible;
+      const sidebar = document.getElementById('sidebar');
+      const mapBtn  = document.getElementById('sidebarToggleBtn');
+      const hdrBtn  = document.getElementById('sidebarHeaderBtn');
+      sidebar.classList.toggle('collapsed', !_sidebarVisible);
+      const arrow = _sidebarVisible ? '◀' : '▶';
+      if (mapBtn) mapBtn.textContent = arrow;
+      if (hdrBtn) hdrBtn.textContent = arrow;
+      // リサイザーも非表示
+      const resizer = document.getElementById('resizer');
+      if (resizer) resizer.style.display = _sidebarVisible ? '' : 'none';
+      // 地図サイズ更新
+      setTimeout(() => { if (S.map) S.map.invalidateSize(); }, 230);
+    }
+    window.toggleSidebar = toggleSidebar;
+
+    // =====================================================
+    // フルスクリーン切替
+    // =====================================================
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(e => console.warn(e));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+    window.toggleFullscreen = toggleFullscreen;
+
+    document.addEventListener('fullscreenchange', () => {
+      const btn = document.getElementById('fsBtn');
+      if (!btn) return;
+      btn.textContent = document.fullscreenElement ? '✕ 全画面解除' : '⛶';
+      btn.title = document.fullscreenElement ? '全画面解除 (Esc)' : '全画面表示 (F11)';
+    });
+
     function setupResizer() {
       const resizer = document.getElementById('resizer');
       const sidebar = document.getElementById('sidebar');
@@ -1897,13 +1983,13 @@
 
       const idxSel = document.getElementById('filterIndex');
       const oldIdx = idxSel.value;
-      idxSel.innerHTML = '';
+      // 「全ての指数」オプションを先頭に常に維持する
+      idxSel.innerHTML = '<option value="">📊 全ての指数</option>';
       Array.from(indices).sort().forEach(i => idxSel.appendChild(new Option(i, i)));
-      if (indices.has(oldIdx)) {
-        idxSel.value = oldIdx;
-      } else if (idxSel.options.length > 0) {
-        if (indices.has('NDVI')) idxSel.value = 'NDVI';
-        else idxSel.selectedIndex = 0;
+      if (oldIdx === '' || indices.has(oldIdx)) {
+        idxSel.value = oldIdx;  // ""（全て）も含めて以前の選択を復元
+      } else {
+        idxSel.selectedIndex = 0; // 見つからない場合は「全ての指数」に戻す
       }
     }
 
@@ -2043,7 +2129,26 @@
         li.appendChild(btn);
         ul.appendChild(li);
       }
+
+      // ファイル件数ラベル更新
+      const countLabel = document.getElementById('fileListCountLabel');
+      if (countLabel) {
+        const total = Object.keys(S.files).length;
+        const shown = ul.children.length;
+        countLabel.textContent = total > 0 ? (shown < total ? shown + '/' + total + ' 件表示中' : total + ' 件') : '';
+      }
     }
+
+    // ファイル一覧 表示/非表示トグル
+    let _fileListVisible = true;
+    function toggleFileList() {
+      _fileListVisible = !_fileListVisible;
+      const ul  = document.getElementById('fileList');
+      const btn = document.getElementById('fileListToggleBtn');
+      if (ul)  ul.style.display  = _fileListVisible ? '' : 'none';
+      if (btn) btn.textContent   = _fileListVisible ? '🙈 非表示' : '👁 表示';
+    }
+    window.toggleFileList = toggleFileList;
 
     function refreshSelects() {
       ['redBand', 'nirBand', 'singleBand', 'blueBand', 'greenBand'].forEach(id => {
@@ -2502,7 +2607,7 @@
           const [gFile, gIdx] = parseBandVal(document.getElementById('greenBand').value);
           green = S.files[gFile].data[gIdx];
         }
-        const L = parseFloat(document.getElementById('saviL').value) || 0.5;
+        const L = (() => { const el = document.getElementById('saviL'); return el ? parseFloat(el.value) : 0.5; })();
 
         const { width, height, reprojBbox, epsg } = S.files[rFile];
         const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
@@ -2601,6 +2706,12 @@
     // 描画
     // =====================================================
     function renderRGBOverlay(data, w, h, bb) {
+      // 表示前に既存のGeoTIFFオーバーレイをすべて除去（重ねない）
+      S.overlayCache.forEach(item => {
+        if (item.leafletLayer) { try { S.map.removeLayer(item.leafletLayer); } catch(_) {} }
+      });
+      S.overlayCache = [];
+      S.layer = null;
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx    = canvas.getContext('2d');
@@ -2656,6 +2767,12 @@
     }
 
     function renderOverlay(data, w, h, bb, cmap, mn, mx) {
+      // 表示前に既存のGeoTIFFオーバーレイをすべて除去（重ねない）
+      S.overlayCache.forEach(item => {
+        if (item.leafletLayer) { try { S.map.removeLayer(item.leafletLayer); } catch(_) {} }
+      });
+      S.overlayCache = [];
+      S.layer = null;
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
@@ -2820,10 +2937,12 @@
           ctx.fillStyle = 'rgb('+r+','+g+','+b+')';
           ctx.fillRect(x, 0, 1, 12);
         }
-        // 目盛: 0, 0.2, 0.4, 0.6, 0.8, 1.0
-        document.getElementById('l-min').textContent = '0.0';
-        document.getElementById('l-mid').textContent = '0.4';
-        document.getElementById('l-max').textContent = '1.0';
+        // 目盛: 5色の境界値 0.0, 0.2, 0.4, 0.6, 0.8
+        document.getElementById('l-0').textContent = '0.0';
+        document.getElementById('l-1').textContent = '0.2';
+        document.getElementById('l-2').textContent = '0.4';
+        document.getElementById('l-3').textContent = '0.6';
+        document.getElementById('l-4').textContent = '0.8';
       } else {
         for (let x = 0; x < W; x++) {
           const t = x / (W - 1);
@@ -2831,9 +2950,12 @@
           ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
           ctx.fillRect(x, 0, 1, 12);
         }
-        document.getElementById('l-min').textContent = mn.toFixed(3);
-        document.getElementById('l-mid').textContent = ((mn + mx) / 2).toFixed(3);
-        document.getElementById('l-max').textContent = mx.toFixed(3);
+        const step4 = (mx - mn) / 4;
+        document.getElementById('l-0').textContent = mn.toFixed(3);
+        document.getElementById('l-1').textContent = (mn + step4).toFixed(3);
+        document.getElementById('l-2').textContent = (mn + step4 * 2).toFixed(3);
+        document.getElementById('l-3').textContent = (mn + step4 * 3).toFixed(3);
+        document.getElementById('l-4').textContent = mx.toFixed(3);
       }
     }
 
@@ -3189,7 +3311,7 @@
       const redD   = fRed   ? fRed.data[0]   : null;
       const blueD  = fBlue  ? fBlue.data[0]  : null;
       const greenD = fGreen ? fGreen.data[0] : null;
-      const L      = parseFloat(document.getElementById('saviL')?.value) || 0.5;
+      const L      = (() => { const el = document.getElementById('saviL'); return el ? parseFloat(el.value) : 0.5; })();
       const dLng   = (east - west) / W;
       const dLat   = (north - south) / H;
 
@@ -3376,7 +3498,7 @@
       const redD   = fRed   ? fRed.data[0]   : null;
       const blueD  = fBlue  ? fBlue.data[0]  : null;
       const greenD = fGreen ? fGreen.data[0] : null;
-      const L = parseFloat(document.getElementById('saviL')?.value) || 0.5;
+      const L = (() => { const el = document.getElementById('saviL'); return el ? parseFloat(el.value) : 0.5; })();
       const dLng = (east-west)/W, dLat = (north-south)/H;
       let sum = 0, cnt = 0;
 
