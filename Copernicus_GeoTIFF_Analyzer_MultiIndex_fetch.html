@@ -1396,6 +1396,7 @@
       const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",           { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
       const esriStreet   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
       const esriTopo     = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",   { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
+      const osmJp = L.tileLayer("https://tile.openstreetmap.jp/{z}/{x}/{y}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors" });
       const openTopo     = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                   { maxNativeZoom: 17, maxZoom: 22, attribution: "©OpenTopoMap" });
       const googleMap    = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}",                { maxNativeZoom: 20, maxZoom: 22, attribution: "©Google" });
       const gsiPhoto     = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院航空写真" });
@@ -1417,7 +1418,7 @@
       const baseMaps = {
         "🗺 国土地理院(淡色)": gsiPale, "🗺 国土地理院(標準)": gsiStd, "🗺 地理院色別標高図": gsiRelief,
         "🗺 白地図(Carto)": cartoLight, "🗺 自然色地図(Voyager)": cartoVoyager, "🗺 ダーク地図(Carto)": cartoDark,
-        "🗺 Esri 道路地図": esriStreet, "🗺 Esri 地形図": esriTopo, "🗺 OpenTopoMap(地形)": openTopo,
+        "🗺 Esri 道路地図": esriStreet, "🗺 Esri 地形図": esriTopo, "🗺 OSM (日本サーバー)": osmJp,"🗺 OpenTopoMap(地形)": openTopo,
         "🗺 Google マップ": googleMap, "🛰 地理院最新航空写真": gsiPhoto, "🛰 衛星画像(Esri)": esriSat, "🛰 Google衛星画像": googleSat
       };
       L.control.layers(baseMaps, null, { position: 'bottomleft' }).addTo(S.map);
