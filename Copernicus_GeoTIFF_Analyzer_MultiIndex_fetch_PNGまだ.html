@@ -1388,19 +1388,19 @@
       lsEl.style.color = ok ? '#16a34a' : '#ef4444';
 
       // ── 地図初期化 ──
-      const gsiPale      = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",         { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院淡色" });
-      const gsiStd       = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",          { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院標準" });
-      const gsiRelief    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",        { maxNativeZoom: 15, maxZoom: 22, attribution: "地理院標高" });
+      const gsiPale      = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",         { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院淡色", crossOrigin: 'anonymous' });
+      const gsiStd       = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",          { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院標準", crossOrigin: 'anonymous' });
+      const gsiRelief    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",        { maxNativeZoom: 15, maxZoom: 22, attribution: "地理院標高", crossOrigin: 'anonymous' });
       const osmJp        = L.tileLayer("https://tile.openstreetmap.jp/{z}/{x}/{y}.png",                      { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors", crossOrigin: 'anonymous' });      
-      const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",          { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
-      const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
-      const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",           { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO" });
-      const esriStreet   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
-      const esriTopo     = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",   { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
-      const openTopo     = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                   { maxNativeZoom: 17, maxZoom: 22, attribution: "©OpenTopoMap" });
+      const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",          { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO", crossOrigin: 'anonymous' });
+      const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO", crossOrigin: 'anonymous' });
+      const cartoDark    = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",           { maxNativeZoom: 19, maxZoom: 22, attribution: "©CARTO", crossOrigin: 'anonymous' });
+      const esriStreet   = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri", crossOrigin: 'anonymous' });
+      const esriTopo     = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",   { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri", crossOrigin: 'anonymous' });
+      const openTopo     = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                   { maxNativeZoom: 17, maxZoom: 22, attribution: "©OpenTopoMap", crossOrigin: 'anonymous' });
       const googleMap    = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}",                { maxNativeZoom: 20, maxZoom: 22, attribution: "©Google" });
-      const gsiPhoto     = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院航空写真" });
-      const esriSat      = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri" });
+      const gsiPhoto     = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院航空写真", crossOrigin: 'anonymous' });
+      const esriSat      = L.tileLayer("https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22, attribution: "©Esri", crossOrigin: 'anonymous' });
       const googleSat    = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", { maxNativeZoom: 20, maxZoom: 22, subdomains: ["mt0","mt1","mt2","mt3"], attribution: "©Google" });
 
       S.map = L.map('map', { center: PRESETS.izumo.center, zoom: PRESETS.izumo.zoom, layers: [gsiPale], renderer: L.svg() });
@@ -1710,9 +1710,10 @@
           ctx.drawImage(tileCanvas, 0, 0);
         } catch(e) {
           console.warn('背景タイルはCORS制限により省略（NDVIオーバーレイは保存されます）');
+          alert('⚠️ 現在の背景地図はCORS制限により保存できません。地理院地図などに変更すると保存できます。');
         }
 
-        // ② NDVIオーバーレイ（data URLなのでCORSなし・必ず成功）
+        // ② 配色レイヤー (NDVIオーバーレイ等)
         const overlayImgs = mapEl.querySelectorAll('.leaflet-overlay-pane img');
         for (const img of overlayImgs) {
           if (!img.complete || !img.naturalWidth) continue;
@@ -1724,23 +1725,116 @@
           ctx.globalAlpha = 1;
         }
 
-        // ③ GeoJSONベクタレイヤー（SVG → ローカル生成なのでCORSなし）
+        // ③ ポリゴンとピン (GeoJSON, CircleMarkers etc in SVG)
         const svgEls = mapEl.querySelectorAll('.leaflet-overlay-pane svg, .leaflet-zoom-animated');
         for (const svgEl of svgEls) {
-          if (svgEl.tagName !== 'svg') continue;
+          if (svgEl.tagName.toLowerCase() !== 'svg') continue;
           const rect = svgEl.getBoundingClientRect();
           const x = rect.left - mapRect.left;
           const y = rect.top  - mapRect.top;
-          const svgStr = new XMLSerializer().serializeToString(svgEl);
-          const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+          
+          // Leafletのtransformによる二重ズレを防ぐため、クローンしてstyle(transform)をクリア
+          const clone = svgEl.cloneNode(true);
+          clone.removeAttribute('style');
+          clone.removeAttribute('class');
+          
+          let svgStr = new XMLSerializer().serializeToString(clone);
+          if (!svgStr.includes('xmlns=')) {
+            svgStr = svgStr.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+          }
+          const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
           const url = URL.createObjectURL(blob);
           await new Promise(res => {
             const tmpImg = new Image();
-            tmpImg.onload = () => { try { ctx.drawImage(tmpImg, x, y); } catch(e) {} res(); };
+            tmpImg.onload = () => { try { ctx.drawImage(tmpImg, x, y, rect.width, rect.height); } catch(e) {} res(); };
             tmpImg.onerror = res;
             tmpImg.src = url;
           });
           URL.revokeObjectURL(url);
+        }
+
+        // ③.5 標準マーカー (img) - L.marker等が使われた場合用
+        const markerImgs = mapEl.querySelectorAll('.leaflet-marker-pane img');
+        for (const img of markerImgs) {
+          if (!img.complete || !img.naturalWidth) continue;
+          const rect = img.getBoundingClientRect();
+          const x = rect.left - mapRect.left;
+          const y = rect.top  - mapRect.top;
+          try { ctx.drawImage(img, x, y, rect.width, rect.height); } catch(e) {}
+        }
+
+        // ④ 地番 (Tooltips)
+        const tooltips = mapEl.querySelectorAll('.leaflet-tooltip-pane .leaflet-tooltip');
+        ctx.textBaseline = 'top';
+        for (const tt of tooltips) {
+          const rect = tt.getBoundingClientRect();
+          const x = rect.left - mapRect.left;
+          const y = rect.top  - mapRect.top;
+          
+          const style = window.getComputedStyle(tt);
+          
+          // 背景
+          if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent') {
+             ctx.fillStyle = style.backgroundColor;
+             ctx.fillRect(x, y, rect.width, rect.height);
+          }
+          
+          // 枠線
+          if (style.borderWidth && style.borderWidth !== '0px') {
+             ctx.strokeStyle = style.borderTopColor || '#333';
+             ctx.lineWidth = parseFloat(style.borderWidth) || 1;
+             ctx.strokeRect(x, y, rect.width, rect.height);
+          }
+          
+          // テキスト
+          ctx.fillStyle = style.color;
+          ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const padL = parseFloat(style.paddingLeft) || 0;
+          const padT = parseFloat(style.paddingTop) || 0;
+          ctx.fillText(tt.textContent.trim(), x + padL, y + padT);
+        }
+
+        // ⑤ 凡例 (オプション：あれば描画)
+        const legend = document.getElementById('map-legend');
+        if (legend && legend.style.display !== 'none') {
+           const lRect = legend.getBoundingClientRect();
+           const lx = lRect.left - mapRect.left;
+           const ly = lRect.top - mapRect.top;
+           ctx.fillStyle = 'rgba(255,255,255,0.95)';
+           // radius
+           ctx.beginPath();
+           if (ctx.roundRect) {
+               ctx.roundRect(lx, ly, lRect.width, lRect.height, 8);
+           } else {
+               ctx.rect(lx, ly, lRect.width, lRect.height);
+           }
+           ctx.fill();
+           ctx.strokeStyle = '#cbd5e1';
+           ctx.stroke();
+           
+           const lTitle = document.getElementById('leg-title');
+           if (lTitle) {
+               ctx.fillStyle = '#059669';
+               ctx.font = 'bold 11.2px sans-serif';
+               ctx.fillText(lTitle.textContent, lx + 13, ly + 10);
+           }
+           
+           const lCanvas = document.getElementById('leg-canvas');
+           if (lCanvas) {
+               const lcRect = lCanvas.getBoundingClientRect();
+               ctx.drawImage(lCanvas, lcRect.left - mapRect.left, lcRect.top - mapRect.top, lcRect.width, lcRect.height);
+           }
+           
+           const lLabels = document.querySelector('.leg-labels');
+           if (lLabels) {
+               ctx.fillStyle = '#64748b';
+               ctx.font = '9.6px monospace';
+               const spans = lLabels.querySelectorAll('span');
+               spans.forEach(span => {
+                   const sRect = span.getBoundingClientRect();
+                   ctx.fillText(span.textContent, sRect.left - mapRect.left, sRect.top - mapRect.top);
+               });
+           }
         }
 
         // ダウンロード
