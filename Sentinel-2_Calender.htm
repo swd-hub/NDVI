@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel-2 周回日カレンダー</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+        .input-group {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .input-group label {
+            font-size: 1.1em;
+            margin-right: 10px;
+            color: #555;
+        }
+        .input-group select, .input-group input[type="number"] {
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            margin-right: 10px;
+        }
+        .input-group button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        .input-group button:hover {
+            background-color: #2980b9;
+        }
+        .calendar {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .calendar th, .calendar td {
+            border: 1px solid #ddd;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.1em;
+        }
+        .calendar th {
+            background-color: #ecf0f1;
+            color: #555;
+            font-weight: bold;
+        }
+        .calendar td {
+            background-color: #fdfdfd;
+            height: 80px; /* カレンダーのセルを少し高くする */
+            vertical-align: top; /* 日付をセルの上部に寄せる */
+            position: relative;
+        }
+        .calendar td.today {
+            background-color: #ffeaa7; /* 今日の日付の背景色 */
+        }
+        .calendar td.sentinel-date {
+            background-color: #d4edda; /* Sentinel-2周回日の背景色 */
+            font-weight: bold;
+            color: #28a745;
+        }
+        .day-number {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            font-size: 0.9em;
+            color: #777;
+        }
+        .sentinel-info {
+            font-size: 0.8em;
+            color: #28a745;
+            margin-top: 5px;
+        }
+        .caption {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sentinel-2 周回日カレンダー（出雲市斐川町上空 AM10:40～）</h1>
+
+        <div class="input-group">
+            <label for="year">年:</label>
+            <input type="number" id="year" value="2026" min="1900" max="2100">
+            <label for="month">月:</label>
+            <select id="month">
+                <option value="0">1月</option>
+                <option value="1">2月</option>
+                <option value="2">3月</option>
+                <option value="3">4月</option>
+                <option value="4">5月</option>
+                <option value="5">6月</option>
+                <option value="6">7月</option>
+                <option value="7">8月</option>
+                <option value="8">9月</option>
+                <option value="9">10月</option>
+                <option value="10">11月</option>
+                <option value="11">12月</option>
+            </select>
+            <button onclick="generateCalendar()">カレンダー表示</button>
+        </div>
+
+<table class="calendar" id="calendarBody">
+            <thead>
+                <tr>
+                    <th>日</th>
+                    <th>月</th>
+                    <th>火</th>
+                    <th>水</th>
+                    <th>木</th>
+                    <th>金</th>
+                    <th>土</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- カレンダーの内容がここに動的に生成されます -->
+            </tbody>
+        </table>
+        <p class="caption">※周回時刻は毎日10時40分頃です。</p>
+        <p class="caption">※5月15日を基準として、5日周期で周回日を計算しています。</p>
+    </div>
+
+    <script>
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth(); // 0-11
+
+        document.getElementById('year').value = currentYear;
+        document.getElementById('month').value = currentMonth;
+
+        // 基準日を2026年5月15日とする
+        const baseDate = new Date('2026-05-15T10:40:00');
+        const baseDayInMs = baseDate.getTime();
+        const fiveDaysInMs = 5 * 24 * 60 * 60 * 1000; // 5日をミリ秒で
+
+        function isSentinelDay(year, month, day) {
+            const checkDate = new Date(year, month, day, 10, 40, 0);
+            const diffMs = checkDate.getTime() - baseDayInMs;
+
+            // 5日周期で、過去日も含むようにする
+            // diffMs が負の値の場合も考慮し、絶対値の余りが0になることをチェック
+            return Math.abs(diffMs % fiveDaysInMs) === 0;
+        }
+
+        function generateCalendar() {
+            const year = parseInt(document.getElementById('year').value);
+            const month = parseInt(document.getElementById('month').value); // 0-11
+
+            const calendarBody = document.querySelector('#calendarBody tbody');
+            calendarBody.innerHTML = ''; // カレンダーをクリア
+
+            const firstDayOfMonth = new Date(year, month, 1);
+            const lastDayOfMonth = new Date(year, month + 1, 0); // 翌月の0日目はその月の最終日
+            const numDaysInMonth = lastDayOfMonth.getDate();
+
+            let date = 1;
+            for (let i = 0; i < 6; i++) { // 最大6週を表示
+                const row = document.createElement('tr');
+                for (let j = 0; j < 7; j++) { // 曜日
+                    const cell = document.createElement('td');
+                    if (i === 0 && j < firstDayOfMonth.getDay()) {
+                        // 月の最初の日の前
+                        cell.textContent = '';
+                    } else if (date > numDaysInMonth) {
+                        // 月の最終日の後
+                        cell.textContent = '';
+                    } else {
+                        const cellDate = new Date(year, month, date);
+                        cell.innerHTML = `<div class="day-number">${date}</div>`;
+
+                        if (isSentinelDay(year, month, date)) {
+                            cell.classList.add('sentinel-date');
+                            cell.innerHTML += '<div class="sentinel-info">Sentinel-2 周回</div>';
+                        }
+
+                        if (cellDate.toDateString() === today.toDateString() && year === today.getFullYear() && month === today.getMonth()) {
+                            cell.classList.add('today');
+                        }
+                        date++;
+                    }
+                    row.appendChild(cell);
+                }
+                calendarBody.appendChild(row);
+                if (date > numDaysInMonth) break; // 月の終わりになったらループを抜ける
+            }
+        }
+
+        // ページロード時にカレンダーを生成
+        window.onload = generateCalendar;
+    </script>
+</body>
+</html>
