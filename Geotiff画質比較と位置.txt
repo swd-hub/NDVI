@@ -6,4 +6,11 @@ Highｇで保存する
 
 定点観測 斐川平田
 
-https://browser.dataspace.copernicus.eu/?zoom=14&lat=35.4093&lng=132.83938&themeId=AGRICULTURE&visualizationUrl=U2FsdGVkX18CZQTRO8OsK5eYSkT%2BXJOtlWrQ76SL6%2B4Z%2BLz3E9%2B1rky43P8Al6q1FsT0wdXOMnTJJ2cJsJw618c0C%2Bw1Jf7B1QPYFhdFgS7UpmMIOQ7x4P8dd5eGQxdM&datasetId=S2_L2A_CDAS&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE
+https://browser.dataspace.copernicus.eu/?zoom=13&lat=35.44538&lng=132.83559&themeId=AGRICULTURE&visualizationUrl=U2FsdGVkX1%2FKS4A2oH%2Fwlm8s9ncBvlAv7HoSkRDwHErqRmKhj7Dvg4NR4WaD2eRHmP8VRryDC7DVfVll4%2F6VVwComuLJyMIu5VW%2FE941%2FsiRzKudHxzXCiplAdOFBOTZ&datasetId=S2_L2A_CDAS&fromTime=2026-05-17T00%3A00%3A00.000Z&toTime=2026-05-17T23%3A59%3A59.999Z&layerId=1_TRUE-COLOR&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE
+
+
+各指数に必要なバンド
+指数必要バンド追加チェックNDVIB04 + B08今の設定でOKSAVIB04 + B08今の設定でOKMSAVIB04 + B08今の設定でOKRVIB04 + B08今の設定でOKEVIB02 + B04 + B08B02を追加GNDVIB03 + B08B03を追加
+
+推奨：全指数対応ダウンロード
+Raw欄で B02 + B03 + B04 + B08 を全チェックしてダウンロード
