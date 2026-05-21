@@ -893,15 +893,19 @@
           </button>
         </div>
         <div class="cfg">
-          <div style="margin-bottom:8px;">
-            <button id="btnFiles" style="width:100%;padding:9px 6px;border:2px dashed #6b7280;border-radius:6px;background:#f9fafb;color:#374151;font-size:0.72rem;font-weight:700;cursor:pointer;">
-              🖱️ ファイルを個別選択（補助）
+          <div style="margin-bottom:8px;display:flex;gap:6px;">
+            <button id="btnFiles" style="flex:1;padding:9px 6px;border:2px dashed #6b7280;border-radius:6px;background:#f9fafb;color:#374151;font-size:0.72rem;font-weight:700;cursor:pointer;">
+              📄 ファイル選択
+            </button>
+            <button id="btnFolder" style="flex:1;padding:9px 6px;border:2px dashed #059669;border-radius:6px;background:#f0fdf4;color:#065f46;font-size:0.72rem;font-weight:700;cursor:pointer;">
+              📁 フォルダ選択
             </button>
           </div>
-          <div id="dropZone" style="border:2px dashed #d1d5db;border-radius:6px;padding:6px 10px;text-align:center;color:#9ca3af;font-size:0.68rem;margin-bottom:6px;">
-            ここにTIFをドラッグ&ドロップも可
+          <div id="dropZone" style="border:2px dashed #d1d5db;border-radius:6px;padding:10px;text-align:center;color:#9ca3af;font-size:0.68rem;margin-bottom:6px;transition:all .2s;">
+            📂 ファイル・フォルダをここにドロップ
           </div>
-          <input type="file" id="fileInput" style="display:none" accept=".tif,.tiff" multiple>
+          <input type="file" id="fileInput"   style="display:none" accept=".tif,.tiff" multiple>
+          <input type="file" id="folderInput" style="display:none" accept=".tif,.tiff" multiple webkitdirectory>
 
           <!-- フィルタUI -->
           <div style="display:flex;gap:4px;margin-bottom:8px;">
@@ -1577,19 +1581,88 @@
     function setupEvents() {
       const dz = document.getElementById('dropZone');
       const fi = document.getElementById('fileInput');
+      const fol = document.getElementById('folderInput');
 
       document.getElementById('btnFiles').addEventListener('click', () => fi.click());
+      document.getElementById('btnFolder').addEventListener('click', () => fol.click());
 
       fi.addEventListener('change', e => {
         if (e.target.files.length) loadFiles(e.target.files);
         fi.value = '';
       });
+      fol.addEventListener('change', e => {
+        const tifs = Array.from(e.target.files).filter(f => /\.tiff?$/i.test(f.name));
+        if (tifs.length) loadFiles(tifs);
+        fol.value = '';
+      });
 
-      dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; dz.style.background = 'rgba(5,150,105,0.06)'; });
-      dz.addEventListener('dragleave', () => { dz.style.borderColor = '#d1d5db'; dz.style.background = ''; });
-      dz.addEventListener('drop', e => {
-        e.preventDefault(); dz.style.borderColor = '#d1d5db'; dz.style.background = '';
-        loadFiles(e.dataTransfer.files);
+      // フォルダ再帰読み込みヘルパー
+      function collectTifEntries(entry) {
+        return new Promise(resolve => {
+          if (entry.isFile) {
+            entry.file(f => {
+              resolve(/\.tiff?$/i.test(f.name) ? [f] : []);
+            }, () => resolve([]));
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            const all = [];
+            const readBatch = () => {
+              reader.readEntries(async batch => {
+                if (!batch.length) {
+                  const nested = await Promise.all(all.map(collectTifEntries));
+                  resolve(nested.flat());
+                } else {
+                  all.push(...batch);
+                  readBatch(); // 100件超えるケースのために再帰
+                }
+              }, () => resolve([]));
+            };
+            readBatch();
+          } else {
+            resolve([]);
+          }
+        });
+      }
+
+      dz.addEventListener('dragover', e => {
+        e.preventDefault();
+        dz.style.borderColor = 'var(--accent)';
+        dz.style.background  = 'rgba(5,150,105,0.08)';
+        dz.style.color       = 'var(--accent)';
+      });
+      dz.addEventListener('dragleave', () => {
+        dz.style.borderColor = '#d1d5db';
+        dz.style.background  = '';
+        dz.style.color       = '#9ca3af';
+      });
+      dz.addEventListener('drop', async e => {
+        e.preventDefault();
+        dz.style.borderColor = '#d1d5db';
+        dz.style.background  = '';
+        dz.style.color       = '#9ca3af';
+
+        const items = Array.from(e.dataTransfer.items || []);
+        const hasEntry = items.length && typeof items[0].webkitGetAsEntry === 'function';
+
+        if (hasEntry) {
+          // フォルダ対応パス（DataTransferItem API）
+          setStatus('⏳ フォルダ内のTIFを収集中...', 'loading');
+          const entries = items.map(item => item.webkitGetAsEntry()).filter(Boolean);
+          const files = (await Promise.all(entries.map(collectTifEntries))).flat();
+          if (files.length === 0) {
+            setStatus('❌ TIFファイルが見つかりませんでした', 'error');
+            return;
+          }
+          loadFiles(files);
+        } else {
+          // フォールバック（古いブラウザ / ファイルのみ）
+          const files = Array.from(e.dataTransfer.files).filter(f => /\.tiff?$/i.test(f.name));
+          if (files.length === 0) {
+            setStatus('❌ TIFファイルが見つかりませんでした', 'error');
+            return;
+          }
+          loadFiles(files);
+        }
       });
 
       document.getElementById('tab-ndvi').addEventListener('click', () => switchMode('ndvi'));
