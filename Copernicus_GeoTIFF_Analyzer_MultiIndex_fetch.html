@@ -915,7 +915,10 @@
 
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
             <span id="fileListCountLabel" style="font-size:0.65rem;color:var(--muted);font-family:var(--mono);"></span>
-            <button id="fileListToggleBtn" onclick="toggleFileList()" style="font-size:0.65rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;" title="ファイル一覧 表示/非表示">🙈 非表示</button>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button id="clearAllFilesBtn" onclick="clearAllFiles()" style="font-size:0.65rem;padding:2px 8px;border:1px solid #fca5a5;border-radius:4px;background:#fef2f2;color:#b91c1c;cursor:pointer;font-weight:700;display:none;" title="読み込み済みTIFFをすべてメモリから削除">🗑 全削除</button>
+              <button id="fileListToggleBtn" onclick="toggleFileList()" style="font-size:0.65rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;" title="ファイル一覧 表示/非表示">🙈 非表示</button>
+            </div>
           </div>
           <ul class="file-list" id="fileList"></ul>
         </div>
@@ -1168,7 +1171,14 @@
           </div><!-- /idx-modal -->
         </div><!-- /idx-modal-overlay -->
 
-        <div class="status" id="status">✦ Analytical TIF ファイルを読み込んでください</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;">
+          <div class="status" id="status" style="flex:1;margin-top:0;">✦ Analytical TIF ファイルを読み込んでください</div>
+          <button id="abortBtn" onclick="abortLoading()"
+            style="display:none;flex-shrink:0;padding:6px 10px;border:1px solid #f97316;border-radius:6px;
+                   background:#fff7ed;color:#c2410c;font-size:0.7rem;font-weight:700;cursor:pointer;
+                   white-space:nowrap;"
+            title="読み込みを中断">⏹ 中断</button>
+        </div>
 
         <div id="sec-stats" style="display:none">
           <div class="sh">全体統計</div>
@@ -1288,8 +1298,8 @@
 
     // ▼▼▼ フォルダ一覧をここに追記してください ▼▼▼
     const FOLDER_LIST = [
-      { label: '斐川', path: 'Hikawa' },
-      { label: '平田', path: 'Hirata' },
+      { label: '波長', path: 'Bands' },
+      { label: '指数', path: 'Indices' },
     ];
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
@@ -1355,7 +1365,10 @@
       activeCacheId: null,
       // ── アクティブファイル追跡 ──
       activeFileName: null,
-      _pendingSourceFile: null
+      _pendingSourceFile: null,
+      // ── 読み込み中断 ──
+      abortController: null,
+      loadAborted: false
     };
 
     let tsChart = null;
@@ -1465,13 +1478,16 @@
     // TIFフェッチ読み込み（GitHub Contents API で自動検出）
     // =====================================================
     async function loadTiffFiles() {
+      S.loadAborted = false;
+      S.abortController = new AbortController();
+      const signal = S.abortController.signal;
       setStatus('⏳ GitHubからファイル一覧を取得中...', 'loading');
 
       try {
         // ── ① GitHub Contents API でTIFファイル一覧を取得 ──
         const { owner, repo, path, branch } = getGithubConfig();
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-        const res = await fetch(apiUrl);
+        const res = await fetch(apiUrl, { signal });
         if (!res.ok) throw new Error(`GitHub API エラー: ${res.status} ${res.statusText}`);
         const entries = await res.json();
 
@@ -1492,18 +1508,28 @@
         const errors = [];
 
         for (let i = 0; i < tifEntries.length; i++) {
+          if (S.loadAborted) break;
           const entry = tifEntries[i];
           setStatus(`⏳ フェッチ中... (${i+1}/${tifEntries.length}) ${entry.name}`, 'loading');
           try {
             // download_url = raw.githubusercontent.com の直リンク
-            const r = await fetch(entry.download_url);
+            const r = await fetch(entry.download_url, { signal });
             if (!r.ok) throw new Error('HTTP ' + r.status);
             const buf = await r.arrayBuffer();
             const blob = new Blob([buf], { type: 'image/tiff' });
             fileObjects.push(new File([blob], entry.name, { type: 'image/tiff' }));
           } catch(e) {
+            if (e.name === 'AbortError') break;
             errors.push(entry.name + ': ' + e.message);
           }
+        }
+
+        if (S.loadAborted) {
+          const partial = fileObjects.length;
+          document.getElementById('folder-label').textContent =
+            `⏹ 中断 (${partial}件取得済み)`;
+          if (partial > 0) loadFiles(fileObjects);
+          return;
         }
 
         if (fileObjects.length > 0) {
@@ -1517,8 +1543,11 @@
         if (errors.length) console.warn('TIF読み込み失敗:', errors);
 
       } catch(e) {
+        if (e.name === 'AbortError') return; // 中断は握りつぶす
         setStatus('❌ ' + e.message, 'error');
         console.error(e);
+      } finally {
+        S.abortController = null;
       }
     }
 
@@ -1914,25 +1943,81 @@
     // ファイル読み込み
     // =====================================================
     async function loadFiles(files) {
+      S.loadAborted = false;
       setStatus('読み込み中...', 'loading');
+      const fileErrors = [];
       try {
         for (const file of files) {
-          const buf  = await file.arrayBuffer();
-          const tiff = await GeoTIFF.fromArrayBuffer(buf);
-          const img  = await tiff.getImage();
-          const w    = img.getWidth();
-          const h    = img.getHeight();
-          const bands = img.getSamplesPerPixel();
-          const bbox  = img.getBoundingBox();
-          const epsg  = getEPSG(img);
-          const reprojBbox = toWGS84(bbox, epsg);
-          const data  = await img.readRasters();
+          if (S.loadAborted) break;
+          try {
+            const buf = await file.arrayBuffer();
 
-          console.log('[loadFile]', file.name, {
-            size: w + '×' + h, bands, rawBbox: bbox.map(v => +v.toFixed(2)), epsg, reprojBbox
-          });
+            // ── TIFFマジックバイト検証（Git LFS ポインタや非TIFFを早期に弾く）──
+            if (buf.byteLength < 4) {
+              throw new Error('ファイルが小さすぎます（TIFFではありません）');
+            }
+            const hdr = new Uint8Array(buf, 0, Math.min(64, buf.byteLength));
+            const isLE = hdr[0] === 0x49 && hdr[1] === 0x49; // "II" little-endian TIFF
+            const isBE = hdr[0] === 0x4D && hdr[1] === 0x4D; // "MM" big-endian TIFF
+            if (!isLE && !isBE) {
+              // Git LFS ポインタファイル判定
+              const headText = new TextDecoder('utf-8', { fatal: false })
+                .decode(new Uint8Array(buf, 0, Math.min(60, buf.byteLength)));
+              if (headText.startsWith('version https://git-lfs')) {
+                throw new Error(
+                  'Git LFS ポインタファイルです。\n' +
+                  'raw.githubusercontent.com は LFS オブジェクトを直接返しません。\n' +
+                  '対処: ① リポジトリの LFS を無効化してファイルを再プッシュ、' +
+                  'または ② GitHub Release の Assets としてファイルをアップロードして URL を直接指定してください。'
+                );
+              }
+              throw new Error(
+                `有効な TIFF ファイルではありません（先頭バイト: 0x${hdr[0].toString(16).padStart(2,'0')} 0x${hdr[1].toString(16).padStart(2,'0')}）`
+              );
+            }
 
-          S.files[file.name] = { data, width:w, height:h, bands, bbox, epsg, reprojBbox, firstView: true };
+            const tiff = await GeoTIFF.fromArrayBuffer(buf);
+            const img  = await tiff.getImage();
+            const w    = img.getWidth();
+            const h    = img.getHeight();
+            const bands = img.getSamplesPerPixel();
+            const bbox  = img.getBoundingBox();
+            const epsg  = getEPSG(img);
+            const reprojBbox = toWGS84(bbox, epsg);
+
+            // ── readRasters を独立した try-catch でラップ ──
+            let data;
+            try {
+              data = await img.readRasters();
+            } catch (re) {
+              const hint = re.message && re.message.includes('buffer')
+                ? '（圧縮形式が非対応の可能性。LERC / JPEG2000 は未対応です）'
+                : '';
+              throw new Error('ラスタ読み込み失敗: ' + re.message + hint);
+            }
+
+            console.log('[loadFile]', file.name, {
+              size: w + '×' + h, bands, rawBbox: bbox.map(v => +v.toFixed(2)), epsg, reprojBbox
+            });
+
+            S.files[file.name] = { data, width:w, height:h, bands, bbox, epsg, reprojBbox, firstView: true };
+
+          } catch (fileErr) {
+            fileErrors.push({ name: file.name, msg: fileErr.message });
+            console.error('[loadFile error]', file.name, fileErr);
+          }
+        }
+
+        const loaded = Object.keys(S.files).length;
+
+        if (loaded === 0) {
+          if (S.loadAborted) return; // 中断ボタン側でメッセージ設定済み
+          const firstErr = fileErrors[0];
+          setStatus('❌ 読み込み失敗: ' + (firstErr ? firstErr.name + ' — ' + firstErr.msg.split('\n')[0] : '不明なエラー'), 'error');
+          if (fileErrors.length > 1) {
+            console.warn('全ファイル読み込み失敗:', fileErrors);
+          }
+          return;
         }
 
         updateFilterOptions();
@@ -1941,7 +2026,14 @@
         autoDetectIndexType();
         document.getElementById('sec-band').style.display = '';
         updateAutoDateSelect(); // 生バンドTIFF用: 日付×指数パネルを更新
-        setStatus(Object.keys(S.files).length + ' 件のファイルが読み込まれました', 'ok');
+
+        const abortedPart = S.loadAborted ? '（中断）' : '';
+        const warnPart = fileErrors.length
+          ? `（${fileErrors.length}件失敗: ${fileErrors[0].msg.split('\n')[0]}）`
+          : '';
+        setStatus(loaded + ' 件のファイルが読み込まれました' + abortedPart + warnPart,
+          S.loadAborted || fileErrors.length ? 'loading' : 'ok');
+        if (fileErrors.length) console.warn('読み込み失敗ファイル:', fileErrors);
 
         // 日付が1つしかない場合は自動選択する
         const dateSel = document.getElementById('filterDate');
@@ -2232,6 +2324,9 @@
         const shown = ul.children.length;
         countLabel.textContent = total > 0 ? (shown < total ? shown + '/' + total + ' 件表示中' : total + ' 件') : '';
       }
+      // 全削除ボタン: ファイルが1件以上あれば表示
+      const clearBtn = document.getElementById('clearAllFilesBtn');
+      if (clearBtn) clearBtn.style.display = Object.keys(S.files).length > 0 ? '' : 'none';
     }
 
     // ファイル一覧 表示/非表示トグル
@@ -2244,6 +2339,47 @@
       if (btn) btn.textContent   = _fileListVisible ? '🙈 非表示' : '👁 表示';
     }
     window.toggleFileList = toggleFileList;
+
+    // 読み込み済みTIFFを全件メモリから削除
+    function clearAllFiles() {
+      const count = Object.keys(S.files).length;
+      if (count === 0) return;
+      if (!confirm(`読み込み済みの ${count} 件の TIF ファイルをメモリから削除しますか？\n（地図上のオーバーレイも合わせて消去されます）`)) return;
+
+      // オーバーレイをすべて地図から除去
+      S.overlayCache.forEach(item => {
+        if (item.leafletLayer) { try { S.map.removeLayer(item.leafletLayer); } catch(_) {} }
+      });
+      S.overlayCache = [];
+      S.layer = null;
+      S.activeFileName = null;
+      S.currentData = null;
+
+      // S.files を全クリア
+      for (const k of Object.keys(S.files)) delete S.files[k];
+
+      // UI リセット
+      updateFilterOptions();
+      renderFileList();
+      refreshSelects();
+      renderCacheList();
+      document.getElementById('sec-band').style.display  = 'none';
+      document.getElementById('sec-stats').style.display = 'none';
+      document.getElementById('map-legend').style.display = 'none';
+      setStatus('✅ ' + count + ' 件のTIFをメモリから削除しました', 'ok');
+    }
+    window.clearAllFiles = clearAllFiles;
+
+    // 読み込み中断
+    function abortLoading() {
+      S.loadAborted = true;
+      if (S.abortController) {
+        S.abortController.abort();
+        S.abortController = null;
+      }
+      setStatus('⏹ 読み込みを中断しました', 'error');
+    }
+    window.abortLoading = abortLoading;
 
     function refreshSelects() {
       ['redBand', 'nirBand', 'singleBand', 'blueBand', 'greenBand'].forEach(id => {
@@ -3136,6 +3272,8 @@
       const el = document.getElementById('status');
       el.textContent = msg;
       el.className = 'status ' + (type || '');
+      const ab = document.getElementById('abortBtn');
+      if (ab) ab.style.display = (type === 'loading') ? '' : 'none';
     }
 
     function shortName(p) { return p.split(/[/\\]/).pop(); }
