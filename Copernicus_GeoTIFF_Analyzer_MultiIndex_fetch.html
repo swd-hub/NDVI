@@ -2924,11 +2924,14 @@
         S.currentWidth  = width;
         S.currentHeight = height;
 
-        // RVIは範囲がNDVIと異なるのでgrayまたはspectral
+        // RVIは範囲がNDVIと異なるのでspectral + 0〜10固定正規化（evalscriptと統一）
         const cmap = indexType === 'rvi' ? 'spectral' : 'ndvi';
+        const RVI_MAX = 10;
+        const renderMn = indexType === 'rvi' ? 0       : mn;
+        const renderMx = indexType === 'rvi' ? RVI_MAX : mx;
         showStats(mn, mx, mean, epsg);
-        renderOverlay(result, width, height, reprojBbox, cmap, mn, mx);
-        drawColorbar(cmap, mn, mx, indexName + ' 値');
+        renderOverlay(result, width, height, reprojBbox, cmap, renderMn, renderMx);
+        drawColorbar(cmap, renderMn, renderMx, indexName + ' 値');
         updateIndexLabels(indexName);
         setStatus(`✅ ${indexName} 計算完了 (${cnt} px 有効)`, 'ok');
       } catch (e) {
@@ -3199,12 +3202,31 @@
 
     function applyColormap(name, t, raw) {
       switch (name) {
-        case 'ndvi':
-          if (raw < 0.2)  return [190,170,120];
-          if (raw < 0.4)  return [255,255,180];
-          if (raw < 0.6)  return [144,238,144];
-          if (raw < 0.8)  return [50,205,50];
-          return [0,100,0];
+        case 'ndvi': {
+          // evalscript と同一の色ストップ + 線形補間
+          const STOPS = [
+            [0.0, 181, 159, 114],  // 茶色
+            [0.2, 254, 255, 163],  // 薄黄色
+            [0.4, 144, 237, 142],  // 薄緑色
+            [0.6,  46, 204,  63],  // 緑色
+            [0.8,   0, 101,   3],  // 濃緑色
+          ];
+          if (raw < 0.0) return [181, 159, 114];
+          if (raw >= 0.8) return [0, 101, 3];
+          for (let s = 0; s < STOPS.length - 1; s++) {
+            const [v0,r0,g0,b0] = STOPS[s];
+            const [v1,r1,g1,b1] = STOPS[s + 1];
+            if (raw >= v0 && raw < v1) {
+              const w = (raw - v0) / (v1 - v0);
+              return [
+                Math.round(r0 + (r1 - r0) * w),
+                Math.round(g0 + (g1 - g0) * w),
+                Math.round(b0 + (b1 - b0) * w),
+              ];
+            }
+          }
+          return [0, 101, 3];
+        }
         case 'gray': { const g = Math.round(t*255); return [g,g,g]; }
         case 'hot':
           if (t < 0.33) { const s = t/0.33; return [Math.round(s*255),0,0]; }
@@ -3212,11 +3234,32 @@
           { const s = (t-.66)/.34; return [255,255,Math.round(s*255)]; }
         case 'blue':
           return [20, Math.round(t*150+50), Math.round(t*205+50)];
-        case 'spectral':
-          if (t < .25) { const s = t/.25; return [0,Math.round(s*255),255]; }
-          if (t < .50) { const s = (t-.25)/.25; return [0,255,Math.round((1-s)*255)]; }
-          if (t < .75) { const s = (t-.50)/.25; return [Math.round(s*255),255,0]; }
-          { const s = (t-.75)/.25; return [255,Math.round((1-s)*255),0]; }
+        case 'spectral': {
+          // 青→シアン→緑→黄→オレンジ→赤 の6ストップ
+          const SP = [
+            [0.00,   0,   0, 255],  // 青
+            [0.20,   0, 200, 255],  // シアン
+            [0.40,   0, 220,   0],  // 緑
+            [0.60, 255, 255,   0],  // 黄
+            [0.80, 255, 120,   0],  // オレンジ
+            [1.00, 220,   0,   0],  // 赤
+          ];
+          if (t <= 0) return [SP[0][1], SP[0][2], SP[0][3]];
+          if (t >= 1) return [SP[5][1], SP[5][2], SP[5][3]];
+          for (let s = 0; s < SP.length - 1; s++) {
+            const [v0,r0,g0,b0] = SP[s];
+            const [v1,r1,g1,b1] = SP[s + 1];
+            if (t >= v0 && t <= v1) {
+              const w = (t - v0) / (v1 - v0);
+              return [
+                Math.round(r0 + (r1 - r0) * w),
+                Math.round(g0 + (g1 - g0) * w),
+                Math.round(b0 + (b1 - b0) * w),
+              ];
+            }
+          }
+          return [220, 0, 0];
+        }
         default: return [128,128,128];
       }
     }
@@ -3232,12 +3275,12 @@
       if (cmap === 'ndvi') {
         // 固定 0〜1 スケールで描画
         const stops = [
-          { raw: 0.0,  color: [190,170,120] },
-          { raw: 0.2,  color: [255,255,180] },
-          { raw: 0.4,  color: [144,238,144] },
-          { raw: 0.6,  color: [50,205,50]   },
-          { raw: 0.8,  color: [0,100,0]     },
-          { raw: 1.0,  color: [0,100,0]     },
+          { raw: 0.0,  color: [181, 159, 114] },
+          { raw: 0.2,  color: [254, 255, 163] },
+          { raw: 0.4,  color: [144, 237, 142] },
+          { raw: 0.6,  color: [ 46, 204,  63] },
+          { raw: 0.8,  color: [  0, 101,   3] },
+          { raw: 1.0,  color: [  0, 101,   3] },
         ];
         for (let x = 0; x < W; x++) {
           const raw = x / (W - 1); // 0〜1
