@@ -4,13 +4,10 @@ Lowは明らかに画質が低下する
 結論
 Highｇで保存する
 
+
+B2,B3,B4,B8,B11
+
 定点観測 斐川平田
 
-https://browser.dataspace.copernicus.eu/?zoom=13&lat=35.44538&lng=132.83559&themeId=AGRICULTURE&visualizationUrl=U2FsdGVkX1%2FKS4A2oH%2Fwlm8s9ncBvlAv7HoSkRDwHErqRmKhj7Dvg4NR4WaD2eRHmP8VRryDC7DVfVll4%2F6VVwComuLJyMIu5VW%2FE941%2FsiRzKudHxzXCiplAdOFBOTZ&datasetId=S2_L2A_CDAS&fromTime=2026-05-17T00%3A00%3A00.000Z&toTime=2026-05-17T23%3A59%3A59.999Z&layerId=1_TRUE-COLOR&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE
+https://browser.dataspace.copernicus.eu/?zoom=13&lat=35.43137&lng=132.85432&themeId=AGRICULTURE&visualizationUrl=U2FsdGVkX19k4uP2E4vqSlG4LKY8xsHRC91ZQZj7ZOxzMwTpLbQqunD26NTzGifi%2BLItpf22G%2BjJkGcjx%2FbxzpJ%2FZEeMl6Diw9Y5D7LWVef%2F2S0fcABifZV23Q1rLBFv&datasetId=S2_L2A_CDAS&fromTime=2026-05-19T00%3A00%3A00.000Z&toTime=2026-05-19T23%3A59%3A59.999Z&layerId=1_TRUE-COLOR&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE
 
-
-各指数に必要なバンド
-指数必要バンド追加チェックNDVIB04 + B08今の設定でOKSAVIB04 + B08今の設定でOKMSAVIB04 + B08今の設定でOKRVIB04 + B08今の設定でOKEVIB02 + B04 + B08B02を追加GNDVIB03 + B08B03を追加
-
-推奨：全指数対応ダウンロード
-Raw欄で B02 + B03 + B04 + B08 を全チェックしてダウンロード
