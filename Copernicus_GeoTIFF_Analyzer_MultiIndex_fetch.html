@@ -862,16 +862,16 @@
                transition:all .15s;flex-shrink:0;"
         onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
         onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">⛶</button>
-      <a href="https://browser.dataspace.copernicus.eu/"
-         target="_blank" rel="noopener"
+      <button onclick="openCopernicusBrowser()"
          style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
                 background:#0f4c81;color:#fff;border-radius:6px;border:none;cursor:pointer;
                 font-size:12px;font-weight:600;white-space:nowrap;text-decoration:none;
                 box-shadow:0 1px 4px rgba(0,0,0,.3);transition:background .2s;"
          onmouseover="this.style.background='#0a3560'"
-         onmouseout="this.style.background='#0f4c81'">
+         onmouseout="this.style.background='#0f4c81'"
+         title="現在の地図中心・選択日付でCopernicus Browserを開く">
         🌍 Copernicus Browser
-      </a>
+      </button>
     </div>
   </header>
 
@@ -925,7 +925,8 @@
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
             <span id="fileListCountLabel" style="font-size:0.65rem;color:var(--muted);font-family:var(--mono);"></span>
             <div style="display:flex;gap:4px;align-items:center;">
-              <button id="clearAllFilesBtn" onclick="clearAllFiles()" style="font-size:0.65rem;padding:2px 8px;border:1px solid #fca5a5;border-radius:4px;background:#fef2f2;color:#b91c1c;cursor:pointer;font-weight:700;display:none;" title="読み込み済みTIFFをすべてメモリから削除">🗑 全削除</button>
+              <button id="clearAllFilesBtn" onclick="clearAllFiles()" style="font-size:0.65rem;padding:2px 8px;border:1px solid #fca5a5;border-radius:4px;background:#fef2f2;color:#b91c1c;cursor:pointer;font-weight:700;display:none;" title="読み込み済みTIFFをメモリ・DBからすべて削除">🗑 全削除</button>
+              <button id="clearDBBtn" onclick="clearDBOnly()" style="font-size:0.65rem;padding:2px 8px;border:1px solid #a5b4fc;border-radius:4px;background:#eef2ff;color:#4338ca;cursor:pointer;font-weight:700;" title="IndexedDBのキャッシュのみ消去（メモリは保持）">💾 DB消去</button>
               <button id="fileListToggleBtn" onclick="toggleFileList()" style="font-size:0.65rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;" title="ファイル一覧 表示/非表示">🙈 非表示</button>
             </div>
           </div>
@@ -2531,6 +2532,44 @@ function autoSelectBands() {
       setStatus(`✅ IndexedDBのキャッシュ（${dbCount}件）を消去しました`, 'ok');
     }
     window.clearDBOnly = clearDBOnly;
+    // =====================================================
+    // Copernicus Browser 連携（現在地図中心・日付を引き継ぐ）
+    // =====================================================
+    function openCopernicusBrowser() {
+      const center = S.map ? S.map.getCenter() : { lat: 35.431, lng: 132.854 };
+      const zoom   = S.map ? S.map.getZoom()   : 13;
+      const lat = center.lat.toFixed(5);
+      const lng = center.lng.toFixed(5);
+
+      // 日付: フィルタ選択中の日付 → なければ今日
+      const filterDate = document.getElementById('filterDate')?.value;
+      const dateStr = filterDate || new Date().toISOString().slice(0, 10);
+      const fromTime = encodeURIComponent(dateStr + 'T00:00:00.000Z');
+      const toTime   = encodeURIComponent(dateStr + 'T23:59:59.999Z');
+
+      // visualizationUrl は固定値（Copernicus標準農地ビュー）
+      const visUrl = 'U2FsdGVkX19k4uP2E4vqSlG4LKY8xsHRC91ZQZj7ZOxzMwTpLbQqunD26NTzGifi%2BLItpf22G%2BjJkGcjx%2FbxzpJ%2FZEeMl6Diw9Y5D7LWVef%2F2S0fcABifZV23Q1rLBFv';
+
+      const url = [
+        'https://browser.dataspace.copernicus.eu/',
+        '?zoom='    + zoom,
+        '&lat='     + lat,
+        '&lng='     + lng,
+        '&themeId=AGRICULTURE',
+        '&visualizationUrl=' + visUrl,
+        '&datasetId=S2_L2A_CDAS',
+        '&fromTime=' + fromTime,
+        '&toTime='   + toTime,
+        '&layerId=1_TRUE-COLOR',
+        '&demSource3D=%22MAPZEN%22',
+        '&cloudCoverage=30',
+        '&dateMode=SINGLE'
+      ].join('');
+
+      window.open(url, '_blank', 'noopener');
+    }
+    window.openCopernicusBrowser = openCopernicusBrowser;
+
 
     // 読み込み中断
     function abortLoading() {
