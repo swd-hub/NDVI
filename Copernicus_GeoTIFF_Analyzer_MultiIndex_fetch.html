@@ -851,6 +851,11 @@
     <h1>植生指数 GeoTIFF Analyzer <em>[Copernicus Edition]</em></h1>
     <div class="hbadge" style="display:flex;align-items:center;gap:10px;">
       <span id="lib-status" style="color:#aaa;">ライブラリ読込中...</span>
+      <span id="dbStatusBadge"
+        style="font-family:var(--mono);font-size:0.68rem;color:var(--accent);
+               background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.25);
+               border-radius:5px;padding:3px 8px;white-space:nowrap;cursor:pointer;"
+        onclick="clearDBOnly()" title="クリックでIndexedDBキャッシュを消去">💾 DB: —</span>
       <button id="fsBtn" onclick="toggleFullscreen()" title="全画面表示 (F11)"
         style="background:none;border:1px solid var(--border);border-radius:5px;
                padding:4px 9px;font-size:0.82rem;cursor:pointer;color:var(--muted);
@@ -1320,8 +1325,76 @@
       const folder = FOLDER_LIST[idx] || FOLDER_LIST[0];
       return Object.assign({}, GITHUB_BASE, { path: folder.path });
     }
+    
     // =====================================================
+// IndexedDB 管理
+// =====================================================
+const DB_NAME = 'GeoTIFF_Analyzer_DB';
+const STORE_NAME = 'tiff_files';
 
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function saveFileToDB(name, buffer) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(buffer, name);
+    tx.oncomplete = () => resolve();
+    tx.onerror   = (e) => reject(e.target.error);
+    tx.onabort   = ()  => reject(new Error('DB transaction aborted'));
+  });
+}
+
+async function deleteFileFromDB(name) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(name);
+    tx.oncomplete = () => resolve();
+    tx.onerror   = (e) => reject(e.target.error);
+    tx.onabort   = ()  => reject(new Error('DB transaction aborted'));
+  });
+}
+
+async function clearDB() {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).clear();
+}
+
+async function getAllFilesFromDB() {
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    const keysRequest = store.getAllKeys();
+    request.onsuccess = () => {
+      keysRequest.onsuccess = () => {
+        const results = request.result.map((buf, i) => {
+          return new File([buf], keysRequest.result[i], { type: 'image/tiff' });
+        });
+        resolve(results);
+      };
+    };
+  });
+}
+    
+    
+    
+    // =====================================================
     // =====================================================
     // proj4 座標系定義
     // =====================================================
@@ -1474,11 +1547,14 @@
       setupEvents();
       setupResizer();
 
-      // GitHub設定が記入済みなら自動フェッチ
-      if (GITHUB_BASE.owner !== 'your-username') {
-        initFolderSelect();
-        loadTiffFiles();
-      }
+      // ── IndexedDB から前回のTIFFを復元 ──
+      restoreFromDB().then(() => {
+        // GitHub設定が記入済みなら自動フェッチ（DB復元後に実行）
+        if (GITHUB_BASE.owner !== 'your-username') {
+          initFolderSelect();
+          loadTiffFiles();
+        }
+      });
     });
 
     // =====================================================
@@ -1562,6 +1638,37 @@
     }
 
     // =====================================================
+    // IndexedDB から前回TIFFを復元
+    // =====================================================
+    async function restoreFromDB() {
+      try {
+        const files = await getAllFilesFromDB();
+        if (files.length === 0) return;
+        setStatus(`💾 IndexedDBから ${files.length} 件のTIFFを復元中...`, 'loading');
+        await loadFiles(files, true);
+        updateDBStatusBadge();
+        setStatus(`✅ IndexedDBから ${files.length} 件のTIFFを復元しました`, 'ok');
+      } catch (e) {
+        console.warn('IndexedDB復元エラー:', e);
+      }
+    }
+
+    // DBバッジ更新（件数表示）
+    async function updateDBStatusBadge() {
+      try {
+        const db = await openDB();
+        const count = await new Promise(res => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).count();
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => res(0);
+        });
+        const badge = document.getElementById('dbStatusBadge');
+        if (badge) badge.textContent = `💾 DB: ${count}件`;
+      } catch(_) {}
+    }
+
+    // =====================================================
     // フォルダ切り替えセレクト初期化
     // =====================================================
     function initFolderSelect() {
@@ -1593,8 +1700,10 @@
       document.getElementById('btnFolder').addEventListener('click', () => fol.click());
 
       fi.addEventListener('change', e => {
-        if (e.target.files.length) loadFiles(e.target.files);
+        // ⚠️ fi.value='' するとFileListが無効になるため、先にArrayへ変換
+        const files = Array.from(e.target.files);
         fi.value = '';
+        if (files.length) loadFiles(files);
       });
       fol.addEventListener('change', e => {
         const tifs = Array.from(e.target.files).filter(f => /\.tiff?$/i.test(f.name));
@@ -1647,27 +1756,33 @@
         dz.style.background  = '';
         dz.style.color       = '#9ca3af';
 
-        const items = Array.from(e.dataTransfer.items || []);
-        const hasEntry = items.length && typeof items[0].webkitGetAsEntry === 'function';
+        // ⚠️ DataTransfer系はawaitより前に同期的にすべて取得すること
+        // dataTransfer.files はスナップショットなのでevent後も有効
+        const droppedFiles = Array.from(e.dataTransfer.files);
+        // webkitGetAsEntryも同期的に取得（awaitより前）
+        const allEntries = Array.from(e.dataTransfer.items || [])
+          .map(item => typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null)
+          .filter(Boolean);
+        const hasDirectory = allEntries.some(en => en.isDirectory);
 
-        if (hasEntry) {
-          // フォルダ対応パス（DataTransferItem API）
+        if (hasDirectory) {
+          // フォルダを含む場合 → 再帰収集（エントリは同期取得済みなので安全）
           setStatus('⏳ フォルダ内のTIFを収集中...', 'loading');
-          const entries = items.map(item => item.webkitGetAsEntry()).filter(Boolean);
-          const files = (await Promise.all(entries.map(collectTifEntries))).flat();
+          const files = (await Promise.all(allEntries.map(collectTifEntries))).flat();
           if (files.length === 0) {
             setStatus('❌ TIFファイルが見つかりませんでした', 'error');
             return;
           }
           loadFiles(files);
         } else {
-          // フォールバック（古いブラウザ / ファイルのみ）
-          const files = Array.from(e.dataTransfer.files).filter(f => /\.tiff?$/i.test(f.name));
-          if (files.length === 0) {
-            setStatus('❌ TIFファイルが見つかりませんでした', 'error');
+          // ファイルのみ → dataTransfer.files を直接使う
+          // （webkitGetAsEntry経由のentry.file()はevent後に無効になることがある）
+          const tifFiles = droppedFiles.filter(f => /\.tiff?$/i.test(f.name));
+          if (tifFiles.length === 0) {
+            setStatus('❌ TIFファイルが見つかりませんでした（.tif / .tiff のみ対応）', 'error');
             return;
           }
-          loadFiles(files);
+          loadFiles(tifFiles);
         }
       });
 
@@ -1760,6 +1875,7 @@
           if (cached) deleteCache(cached.id);
           if (S.activeFileName === name) S.activeFileName = null;
           delete S.files[name];
+          deleteFileFromDB(name).then(() => updateDBStatusBadge()); // IndexedDBからも削除
           updateFilterOptions();
           renderFileList();
           refreshSelects();
@@ -2021,38 +2137,22 @@
     // =====================================================
     // ファイル読み込み
     // =====================================================
-    async function loadFiles(files) {
+async function loadFiles(files, isRestoring = false) {
       S.loadAborted = false;
-      setStatus('読み込み中...', 'loading');
+      setStatus(isRestoring ? '💾 ストレージから復元中...' : '読み込み中...', 'loading');
       const fileErrors = [];
+      
       try {
         for (const file of files) {
           if (S.loadAborted) break;
           try {
             const buf = await file.arrayBuffer();
 
-            // ── TIFFマジックバイト検証（Git LFS ポインタや非TIFFを早期に弾く）──
-            if (buf.byteLength < 4) {
-              throw new Error('ファイルが小さすぎます（TIFFではありません）');
-            }
-            const hdr = new Uint8Array(buf, 0, Math.min(64, buf.byteLength));
-            const isLE = hdr[0] === 0x49 && hdr[1] === 0x49; // "II" little-endian TIFF
-            const isBE = hdr[0] === 0x4D && hdr[1] === 0x4D; // "MM" big-endian TIFF
-            if (!isLE && !isBE) {
-              // Git LFS ポインタファイル判定
-              const headText = new TextDecoder('utf-8', { fatal: false })
-                .decode(new Uint8Array(buf, 0, Math.min(60, buf.byteLength)));
-              if (headText.startsWith('version https://git-lfs')) {
-                throw new Error(
-                  'Git LFS ポインタファイルです。\n' +
-                  'raw.githubusercontent.com は LFS オブジェクトを直接返しません。\n' +
-                  '対処: ① リポジトリの LFS を無効化してファイルを再プッシュ、' +
-                  'または ② GitHub Release の Assets としてファイルをアップロードして URL を直接指定してください。'
-                );
-              }
-              throw new Error(
-                `有効な TIFF ファイルではありません（先頭バイト: 0x${hdr[0].toString(16).padStart(2,'0')} 0x${hdr[1].toString(16).padStart(2,'0')}）`
-              );
+            // TIFF検証
+            if (buf.byteLength < 4) throw new Error('ファイルが小さすぎます');
+            const hdr = new Uint8Array(buf, 0, 2);
+            if (!((hdr[0] === 0x49 && hdr[1] === 0x49) || (hdr[0] === 0x4D && hdr[1] === 0x4D))) {
+              throw new Error('有効なTIFFではありません');
             }
 
             const tiff = await GeoTIFF.fromArrayBuffer(buf);
@@ -2060,80 +2160,42 @@
             const w    = img.getWidth();
             const h    = img.getHeight();
             const bands = img.getSamplesPerPixel();
-            const bbox  = img.getBoundingBox();
             const epsg  = getEPSG(img);
-            const reprojBbox = toWGS84(bbox, epsg);
+            const reprojBbox = toWGS84(img.getBoundingBox(), epsg);
+            const data = await img.readRasters();
 
-            // ── readRasters を独立した try-catch でラップ ──
-            let data;
-            try {
-              data = await img.readRasters();
-            } catch (re) {
-              const hint = re.message && re.message.includes('buffer')
-                ? '（圧縮形式が非対応の可能性。LERC / JPEG2000 は未対応です）'
-                : '';
-              throw new Error('ラスタ読み込み失敗: ' + re.message + hint);
+            // メモリに保存
+            S.files[file.name] = { data, width:w, height:h, bands, epsg, reprojBbox, firstView: true };
+
+            // 【重要】新規読み込み時のみIndexedDBに保存
+            // DB保存失敗はメモリ読み込みに影響させない（独立したtry-catch）
+            if (!isRestoring) {
+              try {
+                await saveFileToDB(file.name, buf);
+              } catch (dbErr) {
+                console.warn(`DB保存スキップ (${file.name}):`, dbErr.message);
+              }
             }
-
-            console.log('[loadFile]', file.name, {
-              size: w + '×' + h, bands, rawBbox: bbox.map(v => +v.toFixed(2)), epsg, reprojBbox
-            });
-
-            S.files[file.name] = { data, width:w, height:h, bands, bbox, epsg, reprojBbox, firstView: true };
 
           } catch (fileErr) {
             fileErrors.push({ name: file.name, msg: fileErr.message });
-            console.error('[loadFile error]', file.name, fileErr);
           }
         }
 
         const loaded = Object.keys(S.files).length;
-
-        if (loaded === 0) {
-          if (S.loadAborted) return; // 中断ボタン側でメッセージ設定済み
-          const firstErr = fileErrors[0];
-          setStatus('❌ 読み込み失敗: ' + (firstErr ? firstErr.name + ' — ' + firstErr.msg.split('\n')[0] : '不明なエラー'), 'error');
-          if (fileErrors.length > 1) {
-            console.warn('全ファイル読み込み失敗:', fileErrors);
-          }
-          return;
-        }
-
-        updateFilterOptions();
-        renderFileList();
-        refreshSelects();
-        autoDetectIndexType();
-        document.getElementById('sec-band').style.display = '';
-        updateAutoDateSelect(); // 生バンドTIFF用: 日付×指数パネルを更新
-
-        const abortedPart = S.loadAborted ? '（中断）' : '';
-        const warnPart = fileErrors.length
-          ? `（${fileErrors.length}件失敗: ${fileErrors[0].msg.split('\n')[0]}）`
-          : '';
-        setStatus(loaded + ' 件のファイルが読み込まれました' + abortedPart + warnPart,
-          S.loadAborted || fileErrors.length ? 'loading' : 'ok');
-        if (fileErrors.length) console.warn('読み込み失敗ファイル:', fileErrors);
-
-        // 日付が1つしかない場合は自動選択する
-        const dateSel = document.getElementById('filterDate');
-        if (dateSel && dateSel.options.length === 2) {
-          dateSel.selectedIndex = 1;
-          onFilterDateChange();
-        } else {
-          autoSelectBands();
-        }
-
-        // 1ファイルでバンド数 >= 3 → 単バンドRGB表示モードをデフォルトに
-        const names = Object.keys(S.files);
-        if (names.length === 1 && S.files[names[0]].bands >= 3) {
-          switchMode('single');
-          document.getElementById('colormap').value = 'rgb';
+        if (loaded > 0) {
+          updateFilterOptions();
+          renderFileList();
+          refreshSelects();
+          updateAutoDateSelect();
+          updateDBStatusBadge();
+          setStatus(loaded + ' 件のファイルを読み込みました', 'ok');
         }
       } catch (e) {
         setStatus('エラー: ' + e.message, 'error');
-        console.error(e);
       }
     }
+    
 
     // =====================================================
     // EPSG 取得・座標変換
@@ -2264,70 +2326,57 @@
       autoSelectBands();
     }
 
-    function autoSelectBands() {
+// =====================================================
+// バンド自動選択ロジック（修正版）
+// =====================================================
+function autoSelectBands() {
       const dateSel = document.getElementById('filterDate');
       const targetDate = dateSel ? dateSel.value : '';
       if (!targetDate) return;
 
       const indexType = document.getElementById('indexType').value;
-      
       const dateFiles = Object.keys(S.files).filter(name => getDateFromFilename(name) === targetDate);
       if (dateFiles.length === 0) return;
 
-      let b02_file = null, b03_file = null, b04_file = null, b08_file = null, b11_file = null;
-      for (const name of dateFiles) {
-        if (name.includes('_B02_')) b02_file = name;
-        if (name.includes('_B03_')) b03_file = name;
-        if (name.includes('_B04_')) b04_file = name;
-        if (name.includes('_B08_')) b08_file = name;
-        if (name.includes('_B11_')) b11_file = name;
-      }
+      let b02_f = null, b03_f = null, b04_f = null, b08_f = null, b11_f = null;
+      dateFiles.forEach(name => {
+        if (/_B02_/i.test(name)) b02_f = name;
+        if (/_B03_/i.test(name)) b03_f = name;
+        if (/_B04_/i.test(name)) b04_f = name;
+        if (/_B08_/i.test(name)) b08_f = name;
+        if (/_B11_/i.test(name)) b11_f = name;
+      });
 
-      if (b04_file || b08_file) {
-        switchMode('ndvi');
-      }
-
-      const setSelectValue = (selectId, fileName) => {
-        if (!fileName) return;
-        const sel = document.getElementById(selectId);
+      const setVal = (id, file) => {
+        const sel = document.getElementById(id);
         if (!sel) return;
+        if (!file) { sel.value = ""; return; }
+        const target = file + '\x00' + 0;
         for (let i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value.startsWith(fileName + '\x00')) {
-            sel.selectedIndex = i;
-            break;
-          }
+          if (sel.options[i].value === target) { sel.selectedIndex = i; break; }
         }
       };
 
-      setSelectValue('nirBand', b08_file);
-      setSelectValue('redBand', b04_file);
-      if (indexType === 'evi') {
-        setSelectValue('blueBand', b02_file);
-      } else if (indexType === 'gndvi') {
-        setSelectValue('greenBand', b03_file);
-      } else if (indexType === 'truecolor') {
-        setSelectValue('greenBand', b03_file);
-        setSelectValue('blueBand',  b02_file);
+      if (indexType === 'truecolor') {
+        setVal('redBand',   b04_f);
+        setVal('greenBand', b03_f);
+        setVal('blueBand',  b02_f);
       } else if (indexType === 'agriculture') {
-        setSelectValue('redBand',  b11_file);  // B11 → redBand (SWIR/R)
-        setSelectValue('nirBand',  b08_file);  // B08 → nirBand (NIR/G)
-        setSelectValue('blueBand', b02_file);  // B02 → blueBand (Blue/B)
+        setVal('redBand',   b11_f);
+        setVal('nirBand',   b08_f);
+        setVal('blueBand',  b02_f);
+      } else {
+        setVal('nirBand', b08_f);
+        setVal('redBand', b04_f);
+        if (indexType === 'evi')   setVal('blueBand', b02_f);
+        if (indexType === 'gndvi') setVal('greenBand', b03_f);
       }
 
-      if (typeof checkSameBand === 'function') checkSameBand();
-      if (typeof updateBandLabel === 'function') {
-        updateBandLabel('redBand', 'redLabel');
-        updateBandLabel('nirBand', 'nirLabel');
-        updateBandLabel('blueBand', 'blueLabel');
-        updateBandLabel('greenBand', 'greenLabel');
-      }
-
-      if (b04_file && b08_file) {
-        setTimeout(() => {
-          const computeBtn = document.getElementById('computeBtn');
-          if (computeBtn && !computeBtn.disabled) computeBtn.click();
-        }, 50);
-      }
+      checkSameBand();
+      updateBandLabel('redBand', 'redLabel');
+      updateBandLabel('nirBand', 'nirLabel');
+      updateBandLabel('blueBand', 'blueLabel');
+      updateBandLabel('greenBand', 'greenLabel');
     }
 
     function onFilterIndexChange() {
@@ -2427,11 +2476,11 @@
     }
     window.toggleFileList = toggleFileList;
 
-    // 読み込み済みTIFFを全件メモリから削除
+    // 読み込み済みTIFFを全件メモリ＋DBから削除
     function clearAllFiles() {
       const count = Object.keys(S.files).length;
       if (count === 0) return;
-      if (!confirm(`読み込み済みの ${count} 件の TIF ファイルをメモリから削除しますか？\n（地図上のオーバーレイも合わせて消去されます）`)) return;
+      if (!confirm(`読み込み済みの ${count} 件の TIF ファイルをメモリおよびIndexedDBから削除しますか？\n（地図上のオーバーレイも合わせて消去されます）`)) return;
 
       // オーバーレイをすべて地図から除去
       S.overlayCache.forEach(item => {
@@ -2445,6 +2494,9 @@
       // S.files を全クリア
       for (const k of Object.keys(S.files)) delete S.files[k];
 
+      // IndexedDB も消去
+      clearDB().then(() => updateDBStatusBadge());
+
       // UI リセット
       updateFilterOptions();
       renderFileList();
@@ -2453,9 +2505,32 @@
       document.getElementById('sec-band').style.display  = 'none';
       document.getElementById('sec-stats').style.display = 'none';
       document.getElementById('map-legend').style.display = 'none';
-      setStatus('✅ ' + count + ' 件のTIFをメモリから削除しました', 'ok');
+      setStatus('✅ ' + count + ' 件のTIFをメモリ・DBから削除しました', 'ok');
     }
     window.clearAllFiles = clearAllFiles;
+
+    // IndexedDB のみを消去（メモリは保持）
+    async function clearDBOnly() {
+      let dbCount = 0;
+      try {
+        const db = await openDB();
+        dbCount = await new Promise(res => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).count();
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => res(0);
+        });
+      } catch(_) {}
+      if (dbCount === 0) {
+        alert('IndexedDB にデータはありません。');
+        return;
+      }
+      if (!confirm(`IndexedDB に保存された ${dbCount} 件のTIFFキャッシュを消去しますか？\n（現在のメモリ上のデータは保持されます）`)) return;
+      await clearDB();
+      updateDBStatusBadge();
+      setStatus(`✅ IndexedDBのキャッシュ（${dbCount}件）を消去しました`, 'ok');
+    }
+    window.clearDBOnly = clearDBOnly;
 
     // 読み込み中断
     function abortLoading() {
@@ -2468,7 +2543,7 @@
     }
     window.abortLoading = abortLoading;
 
-    function refreshSelects() {
+function refreshSelects() {
       ['redBand', 'nirBand', 'singleBand', 'blueBand', 'greenBand'].forEach(id => {
         const sel = document.getElementById(id);
         if (!sel) return;
@@ -2480,26 +2555,9 @@
             sel.appendChild(new Option(label, name + '\x00' + b));
           }
         }
-        if (sel.options.length > 1) sel.selectedIndex = 1;
+        // ここで sel.selectedIndex = 1; としていたのを削除（勝手に選ばせない）
+        sel.value = ""; 
       });
-
-      // NIR デフォルト選択: なるべく赤と異なるバンド/ファイルを選ぶ
-      const nir = document.getElementById('nirBand');
-      const fileNames = Object.keys(S.files);
-      if (fileNames.length >= 2) {
-        // ファイルが2つ以上ある場合: 2番目のファイルの最初のバンドをNIRに
-        const secondFile = fileNames[1];
-        for (let i = 1; i < nir.options.length; i++) {
-          if (nir.options[i].value.startsWith(secondFile + '\x00')) {
-            nir.selectedIndex = i;
-            break;
-          }
-        }
-      } else if (nir.options.length > 2) {
-        // 1ファイル複数バンド: 2番目のバンドをNIRに
-        nir.selectedIndex = 2;
-      }
-      checkSameBand();
 
       // ラベル更新
       updateBandLabel('redBand', 'redLabel');
@@ -3001,25 +3059,23 @@
       document.getElementById('computeBtn').disabled = false;
     }
 
-    // =====================================================
-    // RGB コンポジット表示（TrueColor / Agriculture）
-    // =====================================================
-    async function computeRGBComposite(type) {
-      const rv  = document.getElementById('redBand').value;
-      const nv  = document.getElementById('nirBand').value;
-      const blv = document.getElementById('blueBand').value;
-      const gnv = document.getElementById('greenBand').value;
+// 描画実行前の最終確認用マッピング
+async function computeRGBComposite(type){
+  const rv  = document.getElementById('redBand').value;
+  const nv  = document.getElementById('nirBand').value;
+  const blv = document.getElementById('blueBand').value;
+  const gnv = document.getElementById('greenBand').value;
 
-      if (type === 'truecolor') {
-        if (!rv || !gnv || !blv) {
-          setStatus('TrueColor: B04(赤)・B03(緑)・B02(青) すべて選択してください', 'error'); return;
-        }
-      } else if (type === 'agriculture') {
-        if (!rv || !nv || !blv) {
-          setStatus('Agriculture: B11(SWIR)・B08(NIR)・B02(青) すべて選択してください', 'error'); return;
-        }
-      }
-
+  // 選択値がない場合の警告
+  if (type === 'truecolor') {
+    if (!rv || !gnv || !blv) {
+      setStatus('⚠ TrueColor表示には B04, B03, B02 の3バンドが必要です', 'error'); return;
+    }
+  } else if (type === 'agriculture') {
+    if (!rv || !nv || !blv) {
+      setStatus('⚠ Agriculture表示には B11, B08, B02 の3バンドが必要です', 'error'); return;
+    }
+  }
       setStatus(type === 'truecolor' ? '🌍 TrueColor 描画中...' : '🌾 Agriculture 描画中...', 'loading');
       document.getElementById('computeBtn').disabled = true;
       await tick();
@@ -4041,10 +4097,13 @@ function getPinColor(value, mn, mx) {
     }
 
     // 日付×指数 自動バンド選択して計算
+// 上部の緑色ボタン「バンド自動選択して計算」の実行関数
     function autoSelectAndCompute() {
       const date = document.getElementById('autoDate').value;
       const indexType = document.getElementById('autoIndexType').value;
       if (!date) { setStatus('⚠ 日付を選択してください', 'error'); return; }
+
+      // 【重要】ここに必要なバンドの組み合わせを追加しました
       const BAND_NEEDS = {
         ndvi:  { red:'B04', nir:'B08' },
         evi:   { red:'B04', nir:'B08', blue:'B02' },
@@ -4052,47 +4111,67 @@ function getPinColor(value, mn, mx) {
         msavi: { red:'B04', nir:'B08' },
         gndvi: { green:'B03', nir:'B08' },
         rvi:   { red:'B04', nir:'B08' },
+        truecolor: { red:'B04', green:'B03', blue:'B02' }, // ←追加
+        agriculture: { red:'B11', nir:'B08', blue:'B02' }  // ←追加
       };
+
       const needs = BAND_NEEDS[indexType] || BAND_NEEDS.ndvi;
       const bandFile = {};
+
+      // その日のファイルを収集
       for (const name of Object.keys(S.files)) {
         if (getDateFromFilename(name) !== date) continue;
         const b = getBandFromFilename(name);
         if (b) bandFile[b] = name;
       }
+
+      // バンド不足チェック
       const missing = [];
       if (needs.red   && !bandFile[needs.red])   missing.push(needs.red);
       if (needs.nir   && !bandFile[needs.nir])   missing.push(needs.nir);
       if (needs.blue  && !bandFile[needs.blue])  missing.push(needs.blue);
       if (needs.green && !bandFile[needs.green]) missing.push(needs.green);
-      if (missing.length) { setStatus('⚠ 不足バンド: ' + missing.join(', '), 'error'); return; }
+      
+      if (missing.length) { 
+        setStatus('⚠ 不足バンド: ' + missing.join(', '), 'error'); 
+        return; 
+      }
 
+      // 下のパネルの設定も同期させる
       const itSel = document.getElementById('indexType');
       if (itSel) { itSel.value = indexType; onIndexTypeChange(); }
 
       const setSelect = (selId, bandName) => {
-        if (!bandName || !bandFile[bandName]) return;
-        const target = bandFile[bandName] + '\x00' + 0;
         const sel = document.getElementById(selId);
-        for (let i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === target) { sel.selectedIndex = i; break; }
+        if (!sel) return;
+        if (!bandName || !bandFile[bandName]) {
+          sel.value = "";
+          return;
         }
-        const lblId = selId.replace('Band','Label');
-        updateBandLabel(selId, lblId);
+        const target = bandFile[bandName] + '\x00' + 0;
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === target) {
+            sel.selectedIndex = i;
+            break;
+          }
+        }
+        updateBandLabel(selId, selId.replace('Band','Label'));
       };
+
+      // 各セレクトボックスに流し込み
       setSelect('redBand',   needs.red);
       setSelect('nirBand',   needs.nir);
       setSelect('blueBand',  needs.blue);
       setSelect('greenBand', needs.green);
-      S.lastRedBandVal = document.getElementById('redBand').value;
-      S.lastNirBandVal = document.getElementById('nirBand').value;
+
       checkSameBand();
       switchMode('ndvi');
-      const iNames = {ndvi:'NDVI',evi:'EVI',savi:'SAVI',msavi:'MSAVI',gndvi:'GNDVI',rvi:'RVI'};
+      
+      const iNames = {ndvi:'NDVI',evi:'EVI',savi:'SAVI',msavi:'MSAVI',gndvi:'GNDVI',rvi:'RVI',truecolor:'TrueColor',agriculture:'Agriculture'};
       setStatus(`${iNames[indexType]||'指数'} 計算中 [${date}]...`, 'loading');
-      setTimeout(() => computeNDVI(), 30);
+      setTimeout(() => computeNDVI(), 50);
     }
-
+    
     // =====================================================
     // 生バンドファイル (B04/B08等) から指定指数をポリゴン内計算
     // =====================================================
