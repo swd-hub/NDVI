@@ -942,6 +942,8 @@
               <option value="msavi">MSAVI — B08, B04</option>
               <option value="gndvi">GNDVI — B08, B03</option>
               <option value="rvi">RVI — B08, B04</option>
+              <option value="truecolor">TrueColor — B04, B03, B02（自然色合成）</option>
+              <option value="agriculture">Agriculture — B11, B08, B02（農地偽色）</option>
             </select>
             <div id="autoBandInfo" style="font-size:0.68rem;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:7px 10px;margin-bottom:8px;font-family:var(--mono);line-height:1.8;color:var(--muted);">
               日付を選択するとバンド状況を表示します
@@ -970,6 +972,8 @@
                   <option value="msavi">MSAVI — (2NIR+1−√((2NIR+1)²−8(NIR−Red)))/2</option>
                   <option value="gndvi">GNDVI — (NIR−Green)/(NIR+Green)</option>
                   <option value="rvi">RVI — NIR/Red</option>
+                  <option value="truecolor">🌍 TrueColor — B04, B03, B02（自然色合成）</option>
+                  <option value="agriculture">🌾 Agriculture — B11, B08, B02（農地偽色）</option>
                 </select>
               </div>
 
@@ -979,8 +983,8 @@
                   <select id="redBand" onchange="updateBandLabel('redBand','redLabel');checkSameBand()"></select>
                   <div id="redLabel" style="font-size:0.65rem;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
                 </div>
-                <div>
-                  <label>近赤外バンド (B08)</label>
+                <div id="nirBandContainer">
+                  <label id="nirBandLabel">近赤外バンド (B08)</label>
                   <select id="nirBand" onchange="updateBandLabel('nirBand','nirLabel');checkSameBand()"></select>
                   <div id="nirLabel" style="font-size:0.65rem;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
                 </div>
@@ -988,14 +992,14 @@
 
               <!-- EVI用 青バンド -->
               <div id="blueRow" style="display:none;margin-bottom:4px;">
-                <label>青バンド (B02) — EVI用</label>
+                <label id="blueRowLabel">青バンド (B02) — EVI用</label>
                 <select id="blueBand" onchange="updateBandLabel('blueBand','blueLabel')"></select>
                 <div id="blueLabel" style="font-size:0.65rem;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
               </div>
 
               <!-- GNDVI用 緑バンド -->
               <div id="greenRow" style="display:none;margin-bottom:4px;">
-                <label>緑バンド (B03) — GNDVI用</label>
+                <label id="greenRowLabel">緑バンド (B03) — GNDVI用</label>
                 <select id="greenBand" onchange="updateBandLabel('greenBand','greenLabel')"></select>
                 <div id="greenLabel" style="font-size:0.65rem;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
               </div>
@@ -1010,7 +1014,7 @@
               </div>
 
               <div id="sameBandWarn" style="display:none;background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:4px;padding:4px 8px;font-size:0.72rem;margin-bottom:4px;">⚠️ 赤とNIRに同じバンドが選択されています。指数 = 0 になります。</div>
-              <button class="btn-run" id="computeBtn">🔢 <span id="computeBtnLabel">NDVI</span> 計算</button>
+              <button class="btn-run" id="computeBtn">🔢 <span id="computeBtnLabel">NDVI</span> <span id="computeBtnSuffix">計算</span></button>
             </div>
 
             <div id="panel-single" style="display:none">
@@ -1302,8 +1306,10 @@
 
     // ▼▼▼ フォルダ一覧をここに追記してください ▼▼▼
     const FOLDER_LIST = [
-      { label: '波長', path: 'Bands' },
+      { label: '波長', path: 'Bands' },   
+      // B02/B03/B04/B08/B11（B11は暫定）
       { label: '指数', path: 'Indices' },
+      // B11移動後: { label: 'SWIR', path: 'フォルダ名' } を追記
     ];
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
@@ -2268,12 +2274,13 @@
       const dateFiles = Object.keys(S.files).filter(name => getDateFromFilename(name) === targetDate);
       if (dateFiles.length === 0) return;
 
-      let b02_file = null, b03_file = null, b04_file = null, b08_file = null;
+      let b02_file = null, b03_file = null, b04_file = null, b08_file = null, b11_file = null;
       for (const name of dateFiles) {
         if (name.includes('_B02_')) b02_file = name;
         if (name.includes('_B03_')) b03_file = name;
         if (name.includes('_B04_')) b04_file = name;
         if (name.includes('_B08_')) b08_file = name;
+        if (name.includes('_B11_')) b11_file = name;
       }
 
       if (b04_file || b08_file) {
@@ -2298,6 +2305,13 @@
         setSelectValue('blueBand', b02_file);
       } else if (indexType === 'gndvi') {
         setSelectValue('greenBand', b03_file);
+      } else if (indexType === 'truecolor') {
+        setSelectValue('greenBand', b03_file);
+        setSelectValue('blueBand',  b02_file);
+      } else if (indexType === 'agriculture') {
+        setSelectValue('redBand',  b11_file);  // B11 → redBand (SWIR/R)
+        setSelectValue('nirBand',  b08_file);  // B08 → nirBand (NIR/G)
+        setSelectValue('blueBand', b02_file);  // B02 → blueBand (Blue/B)
       }
 
       if (typeof checkSameBand === 'function') checkSameBand();
@@ -2774,18 +2788,56 @@
     // =====================================================
     function onIndexTypeChange(skipFilterSync = false) {
       const t = document.getElementById('indexType').value;
-      document.getElementById('blueRow').style.display  = t === 'evi'   ? '' : 'none';
-      document.getElementById('greenRow').style.display = t === 'gndvi' ? '' : 'none';
-      document.getElementById('saviRow').style.display  = t === 'savi'  ? '' : 'none';
-      const labels = { ndvi:'NDVI', evi:'EVI', savi:'SAVI', msavi:'MSAVI', gndvi:'GNDVI', rvi:'RVI' };
+      const isComposite = t === 'truecolor' || t === 'agriculture';
+
+      // バンド行の表示制御
+      document.getElementById('blueRow').style.display  =
+        (t === 'evi' || t === 'truecolor' || t === 'agriculture') ? '' : 'none';
+      document.getElementById('greenRow').style.display =
+        (t === 'gndvi' || t === 'truecolor') ? '' : 'none';
+      document.getElementById('saviRow').style.display  = t === 'savi' ? '' : 'none';
+
+      // NIRバンドコンテナ: TrueColorでは不要
+      const nirCont = document.getElementById('nirBandContainer');
+      if (nirCont) nirCont.style.display = t === 'truecolor' ? 'none' : '';
+
+      // ラベル動的変更
+      const redBandLabel  = document.getElementById('redBandLabel');
+      const nirBandLabel  = document.getElementById('nirBandLabel');
+      const blueRowLabel  = document.getElementById('blueRowLabel');
+      const greenRowLabel = document.getElementById('greenRowLabel');
+      if (t === 'truecolor') {
+        if (redBandLabel)  redBandLabel.textContent  = '赤バンド (B04) ← R';
+        if (blueRowLabel)  blueRowLabel.textContent  = '青バンド (B02) ← B';
+        if (greenRowLabel) greenRowLabel.textContent = '緑バンド (B03) ← G';
+      } else if (t === 'agriculture') {
+        if (redBandLabel)  redBandLabel.textContent  = 'SWIRバンド (B11) ← R';
+        if (nirBandLabel)  nirBandLabel.textContent  = 'NIRバンド (B08) ← G';
+        if (blueRowLabel)  blueRowLabel.textContent  = '青バンド (B02) ← B';
+      } else {
+        if (redBandLabel)  redBandLabel.textContent  =
+          t === 'gndvi' ? '赤バンド (使用しない)' : '赤バンド (B04)';
+        if (nirBandLabel)  nirBandLabel.textContent  = '近赤外バンド (B08)';
+        if (blueRowLabel)  blueRowLabel.textContent  = '青バンド (B02) — EVI用';
+        if (greenRowLabel) greenRowLabel.textContent = '緑バンド (B03) — GNDVI用';
+      }
+
+      // ボタンラベル
+      const labels = {
+        ndvi:'NDVI', evi:'EVI', savi:'SAVI', msavi:'MSAVI', gndvi:'GNDVI', rvi:'RVI',
+        truecolor:'TrueColor', agriculture:'Agriculture'
+      };
       const lbl = labels[t] || 'NDVI';
       document.getElementById('computeBtnLabel').textContent = lbl;
-      // 赤バンドラベル変更（GNDVIは"赤"ではなく実質不要だが一応）
-      document.getElementById('redBandLabel').textContent =
-        t === 'gndvi' ? '赤バンド (使用しない)' : '赤バンド (B04)';
+      const suffixEl = document.getElementById('computeBtnSuffix');
+      if (suffixEl) suffixEl.textContent = isComposite ? '表示' : '計算';
 
-      // フィルタ(filterIndex)と連動させる
-      if (!skipFilterSync) {
+      // sameBandWarnはコンポジット時に非表示
+      const warn = document.getElementById('sameBandWarn');
+      if (warn && isComposite) warn.style.display = 'none';
+
+      // フィルタ(filterIndex)と連動させる（コンポジットは連動しない）
+      if (!skipFilterSync && !isComposite) {
         const fSel = document.getElementById('filterIndex');
         if (fSel) {
           const upper = t.toUpperCase();
@@ -2802,14 +2854,15 @@
           }
         }
       }
-      
+
       autoSelectBands();
     }
 
     // 現在の指数名を返す
     function currentIndexName() {
       const t = document.getElementById('indexType')?.value || 'ndvi';
-      return { ndvi:'NDVI', evi:'EVI', savi:'SAVI', msavi:'MSAVI', gndvi:'GNDVI', rvi:'RVI' }[t] || 'NDVI';
+      return { ndvi:'NDVI', evi:'EVI', savi:'SAVI', msavi:'MSAVI', gndvi:'GNDVI', rvi:'RVI',
+               truecolor:'TrueColor', agriculture:'Agriculture' }[t] || 'NDVI';
     }
 
     // 指数計算の本体
@@ -2865,11 +2918,18 @@
     // 指数計算（ボタン押下）
     // =====================================================
     async function computeNDVI() {
+      const indexType = document.getElementById('indexType').value;
+
+      // ── コンポジット表示（TrueColor / Agriculture）──
+      if (indexType === 'truecolor' || indexType === 'agriculture') {
+        await computeRGBComposite(indexType);
+        return;
+      }
+
       const rv = document.getElementById('redBand').value;
       const nv = document.getElementById('nirBand').value;
       if (!rv || !nv) { setStatus('バンドを選択してください', 'error'); return; }
 
-      const indexType = document.getElementById('indexType').value;
       const indexName = currentIndexName();
 
       // EVI: 青バンド必須
@@ -2941,6 +3001,209 @@
       document.getElementById('computeBtn').disabled = false;
     }
 
+    // =====================================================
+    // RGB コンポジット表示（TrueColor / Agriculture）
+    // =====================================================
+    async function computeRGBComposite(type) {
+      const rv  = document.getElementById('redBand').value;
+      const nv  = document.getElementById('nirBand').value;
+      const blv = document.getElementById('blueBand').value;
+      const gnv = document.getElementById('greenBand').value;
+
+      if (type === 'truecolor') {
+        if (!rv || !gnv || !blv) {
+          setStatus('TrueColor: B04(赤)・B03(緑)・B02(青) すべて選択してください', 'error'); return;
+        }
+      } else if (type === 'agriculture') {
+        if (!rv || !nv || !blv) {
+          setStatus('Agriculture: B11(SWIR)・B08(NIR)・B02(青) すべて選択してください', 'error'); return;
+        }
+      }
+
+      setStatus(type === 'truecolor' ? '🌍 TrueColor 描画中...' : '🌾 Agriculture 描画中...', 'loading');
+      document.getElementById('computeBtn').disabled = true;
+      await tick();
+
+      try {
+        const [rFile, rIdx] = parseBandVal(rv);
+        const { width, height, reprojBbox, epsg } = S.files[rFile];
+        const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+        S._pendingLabel      = `${type === 'truecolor' ? 'TrueColor' : 'Agriculture'} ${shortName(rFile)} ${ts}`;
+        S._pendingSourceFile = rFile;
+        S.activeFileName     = rFile;
+        clearSourceOverlay(rFile);
+
+        S.currentData   = S.files[rFile].data[rIdx];
+        S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
+        S.currentWidth  = width;
+        S.currentHeight = height;
+        S.lastDisplayMode = 'ndvi'; // 次のラジオ切り替えでも再計算するモード
+
+        if (type === 'truecolor') {
+          const [gFile, gIdx] = parseBandVal(gnv);
+          const [bFile, bIdx] = parseBandVal(blv);
+          const b04 = S.files[rFile].data[rIdx];
+          const b03 = S.files[gFile].data[gIdx];
+          const b02 = S.files[bFile].data[bIdx];
+          renderTrueColorOverlay(b04, b03, b02, width, height, reprojBbox);
+        } else {
+          const [nFile, nIdx] = parseBandVal(nv);
+          const [bFile, bIdx] = parseBandVal(blv);
+          const b11 = S.files[rFile].data[rIdx];
+          const b08 = S.files[nFile].data[nIdx];
+          const b02 = S.files[bFile].data[bIdx];
+          renderAgricultureOverlay(b11, b08, b02, width, height, reprojBbox);
+        }
+
+        document.getElementById('map-legend').style.display = 'none';
+        document.getElementById('sec-stats').style.display  = 'none';
+        setStatus(`✅ ${type === 'truecolor' ? 'TrueColor' : 'Agriculture'} 表示完了 (EPSG:${epsg || '推定'})`, 'ok');
+      } catch (e) {
+        setStatus('エラー: ' + e.message, 'error');
+        console.error(e);
+      }
+      document.getElementById('computeBtn').disabled = false;
+    }
+
+// Reflectance スケール検出 & Copernicus HighlightCompressVisualizer
+    function detectReflectanceScale(...bandArrays) {
+      let maxVal = 0;
+      for (const arr of bandArrays) {
+        if (!arr || !arr.length) continue;
+        const step = Math.max(1, Math.floor(arr.length / 200));
+        for (let i = 0; i < arr.length; i += step) {
+          const v = arr[i];
+          if (v > maxVal) maxVal = v;
+        }
+      }
+      return maxVal <= 1.0 ? 1 : 10000;
+    }
+
+    function HighlightCompressVisualizer(minValue = 0.0, maxValue = 1.0, gain = 1.0, offset = 0.0, gamma = 1.0) {
+      this.minValue = minValue;
+      this.maxValue = maxValue;
+      this.gain = gain;
+      this.offset = offset;
+      this.gamma = gamma;
+    }
+    HighlightCompressVisualizer.prototype.process = function(val) {
+      let v = val * this.gain + this.offset;
+      if (this.gamma !== 1.0) v = Math.pow(Math.max(0, v), this.gamma);
+      const minV = this.minValue;
+      const maxV = this.maxValue;
+      const hiBound = 2 * maxV - minV;
+      if (v <= minV) return 0;
+      if (v >= hiBound) return 1;
+      if (v <= maxV) {
+        const t = (v - minV) / (maxV - minV);
+        if (t <= 0.92) return t;
+        return 0.92 + (t - 0.92) * (0.9259 - 0.92) / 0.08;
+      }
+      return 0.9259 + (v - maxV) / (hiBound - maxV) * (1 - 0.9259);
+    };
+
+    // =====================================================
+    // 1. TrueColor レンダラー (L2A optimized True Color / カスタムJS準拠)
+    // =====================================================
+    function renderTrueColorOverlay(b04, b03, b02, w, h, bb) {
+      // 既存オーバーレイ除去
+      S.overlayCache.forEach(item => {
+        if (item.leafletLayer) { try { S.map.removeLayer(item.leafletLayer); } catch(_) {} }
+      });
+      S.overlayCache = [];
+      S.layer = null;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const imgD = ctx.createImageData(w, h);
+      const px = imgD.data;
+
+      // リファレンス通りのパラメータ
+      const maxR = 3.0, midR = 0.13, sat = 1.2, gamma = 1.8;
+      const gOff = 0.01;
+      const gOffPow = Math.pow(gOff, gamma);
+      const gOffRange = Math.pow(1 + gOff, gamma) - gOffPow;
+
+      // リファレンス数式の再現
+      const clip = (s) => (s < 0 ? 0 : s > 1 ? 1 : s);
+      const adj = (a, tx, ty, maxC) => {
+        const ar = clip(a / maxC);
+        const denom = (ar * (2 * tx / maxC - 1) - tx / maxC);
+        return Math.abs(denom) < 0.0001 ? ar : ar * (ar * (tx / maxC + ty - 1) - ty) / denom;
+      };
+      const adjGamma = (b) => (Math.pow((b + gOff), gamma) - gOffPow) / gOffRange;
+      const sAdj = (a) => adjGamma(adj(a, midR, 1, maxR));
+      const satEnh = (r, g, b) => {
+        const avgS = (r + g + b) / 3.0 * (1 - sat);
+        return [clip(avgS + r * sat), clip(avgS + g * sat), clip(avgS + b * sat)];
+      };
+      const sRGB = (c) => (c <= 0.0031308 ? (12.92 * c) : (1.055 * Math.pow(c, 0.41666666666) - 0.055));
+
+      const len = Math.min(b04.length, b03.length, b02.length);
+      const scale = detectReflectanceScale(b04, b03, b02);
+
+      for (let i = 0; i < len; i++) {
+        if (b04[i] === 0 && b03[i] === 0 && b02[i] === 0) { px[i * 4 + 3] = 0; continue; }
+        
+        // 反射率正規化 -> 強調 -> 彩度 -> sRGB
+        const [rLin, gLin, bLin] = satEnh(sAdj(b04[i]/scale), sAdj(b03[i]/scale), sAdj(b02[i]/scale));
+        
+        px[i * 4]     = Math.round(clip(sRGB(rLin)) * 255);
+        px[i * 4 + 1] = Math.round(clip(sRGB(gLin)) * 255);
+        px[i * 4 + 2] = Math.round(clip(sRGB(bLin)) * 255);
+        px[i * 4 + 3] = 255;
+      }
+      ctx.putImageData(imgD, 0, 0);
+      const bounds = [[bb.south, bb.west], [bb.north, bb.east]];
+      const dataUrl = canvas.toDataURL();
+      S.layer = L.imageOverlay(dataUrl, bounds, { opacity: S.opacity }).addTo(S.map);
+      saveToCache(dataUrl, bounds, S._pendingLabel || 'TrueColor');
+      S._pendingLabel = null;
+    }
+
+    // =====================================================
+    // 2. Agriculture レンダラー (HighlightCompressVisualizer 準拠)
+    // =====================================================
+    function renderAgricultureOverlay(b11, b08, b02, w, h, bb) {
+      S.overlayCache.forEach(item => {
+        if (item.leafletLayer) { try { S.map.removeLayer(item.leafletLayer); } catch(_) {} }
+      });
+      S.overlayCache = [];
+      S.layer = null;
+
+      const viz = new HighlightCompressVisualizer(0.0, 0.4);
+      const clip = (s) => (s < 0 ? 0 : s > 1 ? 1 : s);
+      const len = Math.min(b11.length, b08.length, b02.length);
+      const scale = detectReflectanceScale(b11, b08, b02);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const imgD = ctx.createImageData(w, h);
+      const px = imgD.data;
+
+      for (let i = 0; i < len; i++) {
+        if (b11[i] === 0 && b08[i] === 0 && b02[i] === 0) { px[i*4+3] = 0; continue; }
+        
+        // Agriculture: R=B11, G=B08, B=B02（コペルニクスブラウザ evalscript 同一）
+        const rLin = viz.process(b11[i] / scale);
+        const gLin = viz.process(b08[i] / scale);
+        const bLin = viz.process(b02[i] / scale);
+
+        px[i*4]   = Math.round(clip(rLin) * 255);
+        px[i*4+1] = Math.round(clip(gLin) * 255);
+        px[i*4+2] = Math.round(clip(bLin) * 255);
+        px[i*4+3] = 255;
+      }
+
+      ctx.putImageData(imgD, 0, 0);
+      const bounds = [[bb.south, bb.west], [bb.north, bb.east]];
+      const dataUrl = canvas.toDataURL();
+      S.layer = L.imageOverlay(dataUrl, bounds, { opacity: S.opacity }).addTo(S.map);
+      saveToCache(dataUrl, bounds, S._pendingLabel || 'Agriculture');
+      S._pendingLabel = null;
+    }
     // =====================================================
     // 単バンド表示
     // =====================================================
