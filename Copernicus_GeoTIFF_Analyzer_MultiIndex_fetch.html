@@ -2964,18 +2964,21 @@ function refreshSelects() {
 
     // 指数計算の本体
     function calcIndex(type, red, nir, blue, green, L) {
-      const n = red.length;
+      const n = (red || nir).length;  // GNDVI では red が null になる場合がある
       const out = new Float32Array(n);
       let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity;
 
       for (let i = 0; i < n; i++) {
-        const r = red[i], ni = nir[i];
+        const r  = red   ? red[i]   : 0;  // GNDVI: red=null → 0
+        const ni = nir[i];
         const bl = blue  ? blue[i]  : 0;
         const gr = green ? green[i] : 0;
         let v;
 
         // nodata判定 (Copernicus Analytical: 背景 = 0)
-        if (r === 0 && ni === 0) { out[i] = NaN; continue; }
+        // GNDVI は赤バンドを使わないため、gr と ni で判定する
+        const isNodata = (type === 'gndvi') ? (gr === 0 && ni === 0) : (r === 0 && ni === 0);
+        if (isNodata) { out[i] = NaN; continue; }
 
         switch (type) {
           case 'ndvi': {
@@ -3025,7 +3028,9 @@ function refreshSelects() {
 
       const rv = document.getElementById('redBand').value;
       const nv = document.getElementById('nirBand').value;
-      if (!rv || !nv) { setStatus('バンドを選択してください', 'error'); return; }
+      // GNDVI は赤バンドを使わないため rv が空でも続行する
+      if (indexType !== 'gndvi' && !rv) { setStatus('赤バンドを選択してください', 'error'); return; }
+      if (!nv) { setStatus('NIRバンドを選択してください', 'error'); return; }
 
       const indexName = currentIndexName();
 
@@ -3044,20 +3049,26 @@ function refreshSelects() {
       S.lastRedBandVal  = rv;
       S.lastNirBandVal  = nv;
 
-      const [rFile] = parseBandVal(rv);
-      S.activeFileName     = rFile;
-      S._pendingSourceFile = rFile;
-      clearSourceOverlay(rFile);
+      // GNDVI で rv が空の場合はNIRファイルをソースとして使う
+      const [nFile_pre] = parseBandVal(nv);
+      const srcFile = rv ? parseBandVal(rv)[0] : nFile_pre;
+      S.activeFileName     = srcFile;
+      S._pendingSourceFile = srcFile;
+      clearSourceOverlay(srcFile);
 
       setStatus(indexName + ' 計算中...', 'loading');
       document.getElementById('computeBtn').disabled = true;
       await tick();
 
       try {
-        const [rFile, rIdx] = parseBandVal(rv);
         const [nFile, nIdx] = parseBandVal(nv);
-        const red = S.files[rFile].data[rIdx];
         const nir = S.files[nFile].data[nIdx];
+        // GNDVI は赤バンド不要（rv が空の場合は null を渡す）
+        let red = null;
+        if (rv) {
+          const [rFile2, rIdx2] = parseBandVal(rv);
+          red = S.files[rFile2].data[rIdx2];
+        }
 
         let blue = null, green = null;
         if (indexType === 'evi') {
@@ -3070,9 +3081,9 @@ function refreshSelects() {
         }
         const L = (() => { const el = document.getElementById('saviL'); return el ? parseFloat(el.value) : 0.5; })();
 
-        const { width, height, reprojBbox, epsg } = S.files[rFile];
+        const { width, height, reprojBbox, epsg } = S.files[srcFile];
         const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
-        S._pendingLabel = `${indexName} ${shortName(rFile)} ${ts}`;
+        S._pendingLabel = `${indexName} ${shortName(srcFile)} ${ts}`;
 
         const { data: result, mn, mx, mean, cnt } = calcIndex(indexType, red, nir, blue, green, L);
 
@@ -4269,7 +4280,8 @@ function getPinColor(value, mn, mx) {
           if (!pointInPolygon(lat, lng, ring)) continue;
           const i = py*W+px;
           const ni=nirD[i], r=redD?redD[i]:0, bl=blueD?blueD[i]:0, gr=greenD?greenD[i]:0;
-          if (r===0 && ni===0) continue;
+          // GNDVI は赤バンド不要なので gr/ni で nodata 判定
+          if (indexType==='gndvi' ? (gr===0&&ni===0) : (r===0&&ni===0)) continue;
           let v;
           switch(indexType) {
             case 'ndvi':  { const d=ni+r; v=d===0?0:(ni-r)/d; break; }
