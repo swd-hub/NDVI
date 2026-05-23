@@ -1549,11 +1549,13 @@ async function getAllFilesFromDB() {
       setupResizer();
 
       // ── IndexedDB から前回のTIFFを復元 ──
-      restoreFromDB().then(() => {
-        // GitHub設定が記入済みなら自動フェッチ（DB復元後に実行）
+      restoreFromDB().then(restoredCount => {
+        // GitHub設定が記入済みなら自動フェッチ（DBが空のときのみ）
         if (GITHUB_BASE.owner !== 'your-username') {
           initFolderSelect();
-          loadTiffFiles();
+          if (restoredCount === 0) {
+            loadTiffFiles();
+          }
         }
       });
     });
@@ -1644,13 +1646,15 @@ async function getAllFilesFromDB() {
     async function restoreFromDB() {
       try {
         const files = await getAllFilesFromDB();
-        if (files.length === 0) return;
+        if (files.length === 0) return 0;
         setStatus(`💾 IndexedDBから ${files.length} 件のTIFFを復元中...`, 'loading');
         await loadFiles(files, true);
         updateDBStatusBadge();
         setStatus(`✅ IndexedDBから ${files.length} 件のTIFFを復元しました`, 'ok');
+        return files.length;
       } catch (e) {
         console.warn('IndexedDB復元エラー:', e);
+        return 0;
       }
     }
 
