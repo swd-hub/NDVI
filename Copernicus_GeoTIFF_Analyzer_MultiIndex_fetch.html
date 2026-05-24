@@ -862,16 +862,17 @@
                transition:all .15s;flex-shrink:0;"
         onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
         onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">⛶</button>
-      <button onclick="openCopernicusBrowser()"
+      <a href="https://browser.dataspace.copernicus.eu/?zoom=13&lat=35.43865&lng=132.83853&themeId=AGRICULTURE&visualizationUrl=U2FsdGVkX1%2FlT63bSH8isQuHS04O6vjKDrjs5zwdjTtaIh9kBU4eRnj7ATjhcidGfQ%2BWw7QK7sJ9pi1jqShMr%2BaxrrzGZUA67IiUb6lGNl%2BQqwvpRtpPdHdpQlZIw9Dc&datasetId=S2_L2A_CDAS&fromTime=2026-03-28T00%3A00%3A00.000Z&toTime=2026-03-28T23%3A59%3A59.999Z&layerId=1_TRUE-COLOR&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE"
+         target="_blank" rel="noopener noreferrer"
          style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
                 background:#0f4c81;color:#fff;border-radius:6px;border:none;cursor:pointer;
                 font-size:12px;font-weight:600;white-space:nowrap;text-decoration:none;
                 box-shadow:0 1px 4px rgba(0,0,0,.3);transition:background .2s;"
          onmouseover="this.style.background='#0a3560'"
          onmouseout="this.style.background='#0f4c81'"
-         title="現在の地図中心・選択日付でCopernicus Browserを開く">
+         title="Copernicus Browserを新しいタブで開く">
         🌍 Copernicus Browser
-      </button>
+      </a>
     </div>
   </header>
 
@@ -2536,43 +2537,6 @@ function autoSelectBands() {
       setStatus(`✅ IndexedDBのキャッシュ（${dbCount}件）を消去しました`, 'ok');
     }
     window.clearDBOnly = clearDBOnly;
-    // =====================================================
-    // Copernicus Browser 連携（現在地図中心・日付を引き継ぐ）
-    // =====================================================
-    function openCopernicusBrowser() {
-      const center = S.map ? S.map.getCenter() : { lat: 35.431, lng: 132.854 };
-      const zoom   = S.map ? S.map.getZoom()   : 13;
-      const lat = center.lat.toFixed(5);
-      const lng = center.lng.toFixed(5);
-
-      // 日付: フィルタ選択中の日付 → なければ今日
-      const filterDate = document.getElementById('filterDate')?.value;
-      const dateStr = filterDate || new Date().toISOString().slice(0, 10);
-      const fromTime = encodeURIComponent(dateStr + 'T00:00:00.000Z');
-      const toTime   = encodeURIComponent(dateStr + 'T23:59:59.999Z');
-
-      // visualizationUrl は固定値（Copernicus標準農地ビュー）
-      const visUrl = 'U2FsdGVkX19k4uP2E4vqSlG4LKY8xsHRC91ZQZj7ZOxzMwTpLbQqunD26NTzGifi%2BLItpf22G%2BjJkGcjx%2FbxzpJ%2FZEeMl6Diw9Y5D7LWVef%2F2S0fcABifZV23Q1rLBFv';
-
-      const url = [
-        'https://browser.dataspace.copernicus.eu/',
-        '?zoom='    + zoom,
-        '&lat='     + lat,
-        '&lng='     + lng,
-        '&themeId=AGRICULTURE',
-        '&visualizationUrl=' + visUrl,
-        '&datasetId=S2_L2A_CDAS',
-        '&fromTime=' + fromTime,
-        '&toTime='   + toTime,
-        '&layerId=1_TRUE-COLOR',
-        '&demSource3D=%22MAPZEN%22',
-        '&cloudCoverage=30',
-        '&dateMode=SINGLE'
-      ].join('');
-
-      window.open(url, '_blank', 'noopener');
-    }
-    window.openCopernicusBrowser = openCopernicusBrowser;
 
 
     // 読み込み中断
