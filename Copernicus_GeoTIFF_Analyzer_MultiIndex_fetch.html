@@ -40,13 +40,9 @@
 
     /* Leaflet タイル継ぎ目（方眼線）対策 */
     .leaflet-tile {
-      margin-bottom: -2px !important;
-      margin-right:  -1px !important;
-    }
-    .leaflet-tile-pane {
-      will-change: transform;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      outline: 1px solid transparent !important;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
     }
 
     body {
@@ -1495,6 +1491,22 @@ async function getAllFilesFromDB() {
         ? '✅ 準備完了' + (hasPj ? '' : '（proj4なし）')
         : '⚠️ ' + (!hasL ? 'Leaflet ' : '') + (!hasGT ? 'GeoTIFF ' : '') + '読み込み失敗';
       lsEl.style.color = ok ? '#16a34a' : '#ef4444';
+
+      // ── Leaflet タイル継ぎ目（方眼線）根本対策 ──
+      // devicePixelRatio を考慮した端末ピクセル単位での丸め
+      (function(){
+        const _orig = L.DomUtil.setTransform;
+        L.DomUtil.setTransform = function(el, offset, scale){
+          if (offset) {
+            const dpr = window.devicePixelRatio || 1;
+            offset = L.point(
+              Math.round(offset.x * dpr) / dpr,
+              Math.round(offset.y * dpr) / dpr
+            );
+          }
+          _orig.call(this, el, offset, scale);
+        };
+      })();
 
       // ── 地図初期化 ──
       const gsiPale      = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",         { maxNativeZoom: 18, maxZoom: 22, attribution: "地理院淡色", crossOrigin: 'anonymous' });
