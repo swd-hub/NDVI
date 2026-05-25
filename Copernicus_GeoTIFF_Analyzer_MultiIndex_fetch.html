@@ -38,6 +38,17 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Leaflet タイル継ぎ目（方眼線）対策 */
+    .leaflet-tile {
+      margin-bottom: -2px !important;
+      margin-right:  -1px !important;
+    }
+    .leaflet-tile-pane {
+      will-change: transform;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+
     body {
       background: var(--bg);
       color: var(--text);
