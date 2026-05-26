@@ -1187,6 +1187,20 @@
           </div><!-- /idx-modal -->
         </div><!-- /idx-modal-overlay -->
 
+        <div class="cfg" style="margin-bottom:8px;">
+          <div class="opacity-row" style="margin-top:0;">
+            <label style="font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;">🌫 レイヤー透明度</label>
+            <input type="range" id="opacity2" min="10" max="100" value="80">
+            <span class="opacity-val" id="opacityLabel2">80%</span>
+          </div>
+        </div>
+
+        <button class="idx-info-btn" onclick="document.getElementById('idxModal').classList.add('open')">
+          <span class="ib-icon">🌿</span>
+          <span>植生指数の役割一覧</span>
+          <span style="margin-left:auto;font-size:0.75rem">▶</span>
+        </button>
+
         <div style="display:flex;align-items:center;gap:6px;margin-top:10px;">
           <div class="status" id="status" style="flex:1;margin-top:0;">✦ Analytical TIF ファイルを読み込んでください</div>
           <button id="abortBtn" onclick="abortLoading()"
@@ -1825,13 +1839,18 @@ async function getAllFilesFromDB() {
 
       document.getElementById('btn-save-png').addEventListener('click', saveMapAsPng);
 
-      document.getElementById('opacity').addEventListener('input', function() {
-        S.opacity = this.value / 100;
-        document.getElementById('opacityLabel').textContent = this.value + '%';
+      function applyOpacity(val) {
+        S.opacity = val / 100;
+        document.getElementById('opacityLabel').textContent  = val + '%';
+        document.getElementById('opacityLabel2').textContent = val + '%';
+        document.getElementById('opacity').value  = val;
+        document.getElementById('opacity2').value = val;
         S.overlayCache.forEach(item => {
           if (item.leafletLayer) item.leafletLayer.setOpacity(S.opacity);
         });
-      });
+      }
+      document.getElementById('opacity').addEventListener('input', function() { applyOpacity(this.value); });
+      document.getElementById('opacity2').addEventListener('input', function() { applyOpacity(this.value); });
 
       document.getElementById('btn-draw').addEventListener('click', () => {
         if (!S.currentData) { setStatus('先に画像を計算・表示してください', 'error'); return; }
