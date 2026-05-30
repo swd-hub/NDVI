@@ -892,9 +892,23 @@
           <label style="font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:5px;">
             📂 フォルダ切り替え
           </label>
-          <select id="folderSelect" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:7px 9px;font-size:0.75rem;font-family:var(--sans);outline:none;margin-bottom:8px;">
+          <select id="folderSelect" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:7px 9px;font-size:0.75rem;font-family:var(--sans);outline:none;margin-bottom:6px;">
             <!-- FOLDER_LIST から自動生成 -->
           </select>
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;">
+            <span style="font-size:0.65rem;color:var(--muted);white-space:nowrap;font-family:var(--mono);">または</span>
+            <input id="folderPathInput" type="text" placeholder="フォルダパスを直接入力…"
+              style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:5px;
+                     color:var(--text);padding:6px 9px;font-size:0.72rem;font-family:var(--mono);
+                     outline:none;transition:border-color .2s;"
+              onfocus="this.style.borderColor='var(--accent)';this.style.boxShadow='0 0 0 2px rgba(5,150,105,0.15)'"
+              onblur="this.style.borderColor='var(--border)';this.style.boxShadow=''"
+              title="入力するとプルダウンより優先されます" />
+            <button onclick="clearFolderPathInput()" title="クリア"
+              style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;
+                     background:var(--card);color:var(--muted);font-size:0.7rem;cursor:pointer;
+                     line-height:1;flex-shrink:0;">✕</button>
+          </div>
           <button onclick="loadTiffFiles()" style="width:100%;padding:7px;border:1px solid var(--accent);border-radius:5px;background:rgba(5,150,105,0.07);color:var(--accent);font-size:0.72rem;font-weight:700;cursor:pointer;">
             🔄 このフォルダを再読み込み
           </button>
@@ -1335,12 +1349,22 @@
     ];
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-    // 現在選択中フォルダ（selectの値から動的に参照）
+    // 現在選択中フォルダ（テキスト入力優先、空ならselectの値を使用）
     function getGithubConfig() {
+      const textInput = document.getElementById('folderPathInput');
+      const customPath = textInput ? textInput.value.trim() : '';
+      if (customPath) {
+        return Object.assign({}, GITHUB_BASE, { path: customPath });
+      }
       const sel = document.getElementById('folderSelect');
       const idx = sel ? parseInt(sel.value, 10) : 0;
       const folder = FOLDER_LIST[idx] || FOLDER_LIST[0];
       return Object.assign({}, GITHUB_BASE, { path: folder.path });
+    }
+
+    function clearFolderPathInput() {
+      const el = document.getElementById('folderPathInput');
+      if (el) el.value = '';
     }
     
     // =====================================================
