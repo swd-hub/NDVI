@@ -811,6 +811,13 @@
     .fsp-table td.val-neg   { color: #ef4444; }
     .fsp-table td.val-none  { color: #cbd5e1; font-size: 0.6rem; }
 
+    /* ── popup値スタイル（テーブルと統一） ── */
+    .popup-val-high { color: #16a34a; font-weight: 700; }
+    .popup-val-mid  { color: #84cc16; font-weight: 600; }
+    .popup-val-low  { color: #f59e0b; font-weight: 500; }
+    .popup-val-neg  { color: #ef4444; font-weight: 600; }
+    .popup-val-none { color: #cbd5e1; font-size: 0.85rem; }
+
     .fsp-empty {
       text-align: center;
       padding: 24px 0;
@@ -1481,6 +1488,7 @@ async function getAllFilesFromDB() {
       pins: [],
       pinLayer: null,
       _lastIndexName: 'NDVI',
+      _currentDate: null,  // ← 現在表示中のレイヤーの日付
       pinMode: false,
       // ── GeoJSON レイヤー ──
       geoLayers: {},
@@ -2815,6 +2823,7 @@ function refreshSelects() {
     // =====================================================
     async function switchToTif(name) {
       S.activeFileName = name;
+      S._currentDate = getDateFromFilename(name);  // ← 日付を記録
       const f = S.files[name];
       if (!f) return;
 
@@ -3089,6 +3098,7 @@ function refreshSelects() {
       const srcFile = rv ? parseBandVal(rv)[0] : nFile_pre;
       S.activeFileName     = srcFile;
       S._pendingSourceFile = srcFile;
+      S._currentDate       = getDateFromFilename(srcFile); // ← 日付を記録
       clearSourceOverlay(srcFile);
 
       setStatus(indexName + ' 計算中...', 'loading');
@@ -3172,6 +3182,7 @@ async function computeRGBComposite(type){
         S._pendingLabel      = `${type === 'truecolor' ? 'TrueColor' : 'Agriculture'} ${shortName(rFile)} ${ts}`;
         S._pendingSourceFile = rFile;
         S.activeFileName     = rFile;
+        S._currentDate       = getDateFromFilename(rFile); // ← 日付を記録
         clearSourceOverlay(rFile);
 
         S.currentData   = S.files[rFile].data[rIdx];
@@ -3828,6 +3839,15 @@ function getPinColor(value, mn, mx) {
   const [r, g, b] = applyColormap(cmap, t, value);
   return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
+
+// ヘルパ: RGB配列から適切な文字色（'#000' or '#fff'）を返す
+function contrastTextColorFromRgbArray(rgb) {
+  if (!rgb || rgb.length < 3) return '#000';
+  const [r, g, b] = rgb.map(Number);
+  // 相対輝度の簡易判定（YIQ / ITU BT.601に近い）
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? '#000' : '#fff';
+}
     // 全ピンの色を現在のレイヤーに合わせて更新
     function refreshPinColors() {
       const mn = S._lastMn, mx = S._lastMx;
@@ -3835,7 +3855,12 @@ function getPinColor(value, mn, mx) {
       S.pins.forEach(pin => {
         const val = getNDVIAt(pin.latlng.lat, pin.latlng.lng);
         const color = getPinColor(val, mn, mx);
-        pin.marker.setStyle({ fillColor: color });
+        // 枠線のコントラスト色
+        const rgb = color.startsWith('rgb') ? color.match(/\d+/g).map(Number) : [100,100,100];
+        const stroke = contrastTextColorFromRgbArray(rgb) === '#fff' ? '#000' : '#fff';
+        if (pin.marker) pin.marker.setStyle({ fillColor: color, color: stroke, weight: 2 });
+        // 外周は白で固定（背景から目立つようにする）
+        if (pin.outer) pin.outer.setStyle({ color: '#ffffff', weight: 3 });
         // 保存値も更新（ポップアップ再表示用）
         pin._lastVal = val;
         pin._lastValName = idxName;
@@ -3855,24 +3880,135 @@ function getPinColor(value, mn, mx) {
       return isFinite(v) && !isNaN(v) ? v : null;
     }
 
-    // props は任意（GeoJSONから読み込む場合に渡す）
-    function addPin(latlng, props, openPopup) {
-      const ndvi  = getNDVIAt(latlng.lat, latlng.lng);
+    // ── ほ場の時系列データをグローバルに保持 ──
+    let _fieldTimeSeriesCache = {};
+
+    function areRingsEqual(ring1, ring2) {
+      if (!ring1 || !ring2) return false;
+      if (ring1.length !== ring2.length) return false;
+      for (let i = 0; i < ring1.length; i++) {
+        const p1 = ring1[i];
+        const p2 = ring2[i];
+        const lat1 = (p1.lat !== undefined) ? p1.lat : p1[0];
+        const lng1 = (p1.lng !== undefined) ? p1.lng : p1[1];
+        const lat2 = (p2.lat !== undefined) ? p2.lat : p2[0];
+        const lng2 = (p2.lng !== undefined) ? p2.lng : p2[1];
+        if (Math.abs(lat1 - lat2) > 1e-9 || Math.abs(lng1 - lng2) > 1e-9) return false;
+      }
+      return true;
+    }
+
+    function findPolygonFeatureForPin(latlng) {
+      for (const key in S.geoLayers) {
+        const layer = S.geoLayers[key].layer;
+        let foundFeature = null;
+        layer.eachLayer(featureLayer => {
+          if (foundFeature) return;
+          const feature = featureLayer.feature;
+          if (!feature || !feature.geometry) return;
+          
+          const geomType = feature.geometry.type;
+          if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+            const coords = feature.geometry.coordinates;
+            const rings = geomType === 'Polygon' 
+              ? [coords[0]]
+              : coords.map(p => p[0]);
+            
+            for (const ring of rings) {
+              const latlngRing = ring.map(([lng, lat]) => ({ lat, lng }));
+              if (pointInPolygon(latlng.lat, latlng.lng, latlngRing)) {
+                foundFeature = feature;
+                break;
+              }
+            }
+          }
+        });
+        if (foundFeature) return foundFeature;
+      }
+      return null;
+    }
+
+    // ── ピン座標を含むポリゴンを検出（フォールバック用） ──
+    function findPolygonRingForPin(latlng) {
+      // GeoJSON レイヤーからポリゴンを検出
+      for (const key in S.geoLayers) {
+        const layer = S.geoLayers[key].layer;
+        let foundRing = null;
+        layer.eachLayer(featureLayer => {
+          if (foundRing) return;
+          const feature = featureLayer.feature;
+          if (!feature || !feature.geometry) return;
+          
+          const geomType = feature.geometry.type;
+          if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+            const coords = feature.geometry.coordinates;
+            const rings = geomType === 'Polygon' 
+              ? [coords[0]]
+              : coords.map(p => p[0]);
+            
+            for (const ring of rings) {
+              const latlngRing = ring.map(([lng, lat]) => ({ lat, lng }));
+              if (pointInPolygon(latlng.lat, latlng.lng, latlngRing)) {
+                foundRing = latlngRing;
+                break;
+              }
+            }
+          }
+        });
+        if (foundRing) return foundRing;
+      }
+      return null;
+    }
+
+    // ── popup 内容を動的に生成（ほ場のクロス表データと一致） ──
+    function generatePopupHtml(latlng, props) {
       const indexName = S._lastIndexName || 'NDVI';
-      const id    = Date.now() + Math.random();
-      const color = getPinColor(ndvi, S._lastMn, S._lastMx);
+      
+      // 日付の決定
+      let currentDate = S._currentDate;
+      if (!currentDate || currentDate === '不明') {
+        if (S.activeFileName) {
+          currentDate = getDateFromFilename(S.activeFileName);
+        }
+        if (!currentDate || currentDate === '不明') {
+          currentDate = document.getElementById('autoDate')?.value;
+        }
+        if (!currentDate || currentDate === '不明') {
+          currentDate = document.getElementById('filterDate')?.value;
+        }
+      }
+      if (currentDate === '不明' || currentDate === '') {
+        currentDate = null;
+      }
+      
+      let html = '<div style="font-family:var(--sans);font-size:12px;line-height:1.6;max-width:280px">';
+      
+      // 日付 + 指数タイプをクロス表示
+      let headerDiv = '';
+      if (currentDate) {
+        headerDiv += '<span style="font-size:11px;color:var(--accent);font-weight:600;">📅 ' + currentDate + '</span>';
+      }
+      if (headerDiv) {
+        html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);">' + headerDiv + '</div>';
+      }
+      
+      // 指数タイプを強調表示
+      html += '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;font-weight:700;">' + indexName + '</div>';
+      
+      // ポリゴンに含まれる場合は properties をマージ
+      let mergedProps = props ? { ...props } : {};
+      const polygonRing = findPolygonRingForPin(latlng);
+      if (polygonRing) {
+        const containingFeature = findPolygonFeatureForPin(latlng);
+        if (containingFeature && containingFeature.properties) {
+          mergedProps = { ...containingFeature.properties, ...mergedProps };
+        }
+      }
 
-      const marker = L.circleMarker(latlng, {
-        radius: 8, color: '#fff', weight: 2,
-        fillColor: color, fillOpacity: 1
-      });
-
-      // ── ポップアップ ──
-      let popupHtml = '<div style="font-family:sans-serif;font-size:12px;line-height:1.6;max-width:260px">';
-      if (props && props.Address) {
-        popupHtml += '<b style="font-size:13px">📍 ' + escHtml(props.Address) + '</b>';
-        if (props.Tiban) popupHtml += ' <span style="color:#64748b">地番: ' + escHtml(props.Tiban) + '</span>';
-        popupHtml += '<hr style="margin:5px 0;border:none;border-top:1px solid #e2e8f0">';
+      if (mergedProps && mergedProps.Address) {
+        html += '<b style="font-size:13px">📍 ' + escHtml(mergedProps.Address) + '</b>';
+        if (mergedProps.Tiban) html += ' <span style="color:var(--muted)">地番: ' + escHtml(mergedProps.Tiban) + '</span>';
+        html += '<hr style="margin:5px 0;border:none;border-top:1px solid var(--border)">';
         // 主要プロパティ表示
         const SHOW_KEYS = [
           ['ClassificationOfLandCodeName','地目'],
@@ -3881,25 +4017,180 @@ function getPinColor(value, mn, mx) {
           ['UsageSituationInvestigationResultCodeName','利用状況'],
           ['KindOfRightCodeName','権利区分'],
         ];
-        popupHtml += '<table style="border-collapse:collapse;width:100%">';
+        html += '<table style="border-collapse:collapse;width:100%">';
         SHOW_KEYS.forEach(([k, label]) => {
-          if (props[k] != null && props[k] !== '') {
-            popupHtml += '<tr><th style="text-align:left;color:#64748b;padding:1px 6px 1px 0;white-space:nowrap;font-weight:600;font-size:11px">' + label + '</th>' +
-              '<td style="padding:1px 0;font-size:11px">' + escHtml(String(props[k])) + '</td></tr>';
+          if (mergedProps[k] != null && mergedProps[k] !== '') {
+            html += '<tr><th style="text-align:left;color:var(--muted);padding:1px 6px 1px 0;white-space:nowrap;font-weight:600;font-size:11px">' + label + '</th>' +
+              '<td style="padding:1px 0;font-size:11px">' + escHtml(String(mergedProps[k])) + '</td></tr>';
           }
         });
-        popupHtml += '</table>';
+        html += '</table>';
       } else {
-        popupHtml += 'lat: ' + latlng.lat.toFixed(5) + '<br>lng: ' + latlng.lng.toFixed(5);
+        html += '<div style="font-size:11px;color:var(--muted);">lat: ' + latlng.lat.toFixed(5) + '<br>lng: ' + latlng.lng.toFixed(5) + '</div>';
       }
-      popupHtml += '<div style="margin-top:5px;font-family:monospace;font-size:11px;color:#64748b">' +
+      html += '<div style="margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--muted)">' +
         latlng.lat.toFixed(5) + ', ' + latlng.lng.toFixed(5) + '</div>';
-      popupHtml += indexName + ': ' + (ndvi !== null
-        ? '<span style="color:#16a34a;font-weight:700">' + ndvi.toFixed(4) + '</span>'
-        : '<span style="color:#6b7280">範囲外</span>');
-      popupHtml += '</div>';
+      
+      // ── 指数値表示 ──
+      let displayValue = null;
+      let debugInfo = '';
+      
+      // ① キャッシュまたはピンクリック時の自動集計から値を取得
+      let cacheFound = false;
+      let cachedRows = null;
+      
+      if (polygonRing) {
+        // すでにキャッシュがあるか確認
+        for (const cacheKey in _fieldTimeSeriesCache) {
+          const cached = _fieldTimeSeriesCache[cacheKey];
+          if (!cached || !cached.ring) continue;
+          if (areRingsEqual(cached.ring, polygonRing)) {
+            cacheFound = true;
+            cachedRows = cached.rows;
+            break;
+          }
+        }
+        
+        // なければ非表示のまま計算してキャッシュ
+        if (!cacheFound) {
+          try {
+            const { dates, indices, rows } = buildFieldTimeSeries(polygonRing);
+            const p = mergedProps || {};
+            const tibanVal = p.Tiban || p.tiban || p['地番'] || null;
+            const addrVal  = p.Address || p.address || p['住所'] || null;
+            
+            const cacheKey = 'field_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            _fieldTimeSeriesCache[cacheKey] = {
+              ring: polygonRing,
+              rows,
+              indices,
+              dates,
+              tibanVal,
+              addrVal
+            };
+            cachedRows = rows;
+            cacheFound = true;
+          } catch (e) {
+            console.warn('ピンクリック時の自動集計エラー:', e);
+          }
+        }
+      }
 
-      marker.bindPopup(popupHtml, { maxWidth: 280 });
+      // キャッシュ（または自動計算したキャッシュ）から現在日付の値を取得
+      if (cacheFound && cachedRows) {
+        if (currentDate) {
+          // 日付の完全一致を試す
+          let rowData = cachedRows.find(r => r.date === currentDate);
+          
+          // 完全一致しない場合は部分一致を試す
+          if (!rowData && currentDate) {
+            rowData = cachedRows.find(r => r.date && String(r.date).includes(currentDate.split('-').slice(0,2).join('-')));
+          }
+          
+          if (rowData && rowData[indexName] !== undefined && rowData[indexName] !== null) {
+            displayValue = rowData[indexName];
+            debugInfo = '(自動集計から取得)';
+          }
+        }
+      }
+      
+      // ② それでも値がない場合は直接計算（フォールバック）
+      if (displayValue === null && currentDate && indexName) {
+        try {
+          if (polygonRing) {
+            // 計算済み指数ファイルを試す
+            const fileNames = Object.keys(S.files).filter(name => getDateFromFilename(name) === currentDate);
+            for (const fileName of fileNames) {
+              const idx = getIndexFromFilename(fileName);
+              if (idx === indexName) {
+                const res = computePolygonMean(fileName, polygonRing);
+                if (res && res.mean !== null) {
+                  displayValue = res.mean;
+                  debugInfo = '(直接計算)';
+                  break;
+                }
+              }
+            }
+            
+            // 生バンドから計算を試す
+            if (displayValue === null) {
+              const keyMap = { 'NDVI':'ndvi', 'EVI':'evi', 'SAVI':'savi', 'MSAVI':'msavi', 'GNDVI':'gndvi' };
+              const key = keyMap[indexName];
+              if (key) {
+                const res = computePolygonIndexFromRaw(currentDate, key, polygonRing);
+                if (res && res.mean !== null) {
+                  displayValue = res.mean;
+                  debugInfo = '(生バンドから計算)';
+                }
+              }
+            }
+          }
+        } catch(e) {
+          console.warn('フォールバック計算エラー:', e);
+        }
+      }
+      
+      // ③ 値の表示（凡例と同じ色で数値を表示する）
+      if (displayValue !== null && isFinite(displayValue)) {
+        // 現在のカラーマップ／レンジに合わせて色を決定
+        const color = getPinColor(displayValue, S._lastMn, S._lastMx) || '#64748b';
+        // 数値は白背景のバッジにして境界線を凡例色にする（どの背景でも視認可能）
+        const rgbBadge = color.startsWith('rgb') ? color.match(/\d+/g).map(Number) : [100,100,100];
+        const badgeTextColor = contrastTextColorFromRgbArray(rgbBadge) === '#fff' ? '#000' : '#000';
+        html += '<div style="margin-top:10px;padding:8px;background:var(--panel);border-radius:5px;text-align:center;">' +
+          '<span style="background:#ffffff;padding:6px 8px;border-radius:8px;border:2px solid ' + color + ';color:' + badgeTextColor + ';font-weight:800;font-size:16px;display:inline-block;">' + displayValue.toFixed(4) + '</span>';
+        if (debugInfo) {
+          html += '<div style="font-size:8px;color:var(--muted);margin-top:3px;">' + debugInfo + '</div>';
+        }
+        html += '<div style="font-size:9px;color:var(--muted);margin-top:4px;">（ほ場値）</div>';
+        html += '</div>';
+      } else {
+        // デバッグ情報を表示
+        let debugMsg = '範囲外';
+        if (!currentDate) debugMsg += '（日付未選択）';
+        if (!indexName) debugMsg += '（指数未選択）';
+        html += '<div style="margin-top:10px;padding:8px;background:var(--panel);border-radius:5px;text-align:center;">' +
+               '<span style="color:var(--muted)">' + debugMsg + '</span>';
+        if (!polygonRing) {
+          html += '<div style="font-size:8px;color:#f59e0b;margin-top:4px;">※ ポリゴン内にピンを配置してください</div>';
+        }
+        html += '</div>';
+      }
+      
+      html += '</div>';
+      return html;
+    }
+
+    // props は任意（GeoJSONから読み込む場合に渡す）
+    function addPin(latlng, props, openPopup) {
+      const ndvi  = getNDVIAt(latlng.lat, latlng.lng);
+      const indexName = S._lastIndexName || 'NDVI';
+      const id    = Date.now() + Math.random();
+      const color = getPinColor(ndvi, S._lastMn, S._lastMx);
+
+      // 外周リング（白）を追加して背景上で目立たせる
+      const outer = L.circleMarker(latlng, {
+        radius: 11, color: '#ffffff', weight: 3, fillOpacity: 0, interactive: false
+      });
+
+      // マーカー本体（内側）
+      // 枠線色は凡例色とのコントラストで決定
+      const rgb = color.startsWith('rgb') ? color.match(/\d+/g).map(Number) : [100,100,100];
+      const strokeColor = contrastTextColorFromRgbArray(rgb) === '#fff' ? '#000' : '#fff';
+      const marker = L.circleMarker(latlng, {
+        radius: 8, color: strokeColor, weight: 2,
+        fillColor: color, fillOpacity: 1
+      });
+
+      // ── 動的 popup（開く度に最新の指数値・日付を反映） ──
+      const popupElement = L.popup({ maxWidth: 300 });
+      marker.bindPopup(popupElement);
+      
+      // popup が開く直前に内容を生成し、常に最新の指数・日付を表示
+      marker.on('popupopen', function() {
+        const popupHtml = generatePopupHtml(latlng, props);
+        popupElement.setContent(popupHtml);
+      });
 
       // 地番ラベルを地図上に常時表示
       if (props && props.Tiban) {
@@ -3912,6 +4203,8 @@ function getPinColor(value, mn, mx) {
       }
 
       if (openPopup !== false) marker.openPopup();
+      // outer を先に追加してから内側を重ねる
+      outer.addTo(S.pinLayer);
       marker.addTo(S.pinLayer);
 
       // ラベル（サイドバー表示用）
@@ -3919,7 +4212,7 @@ function getPinColor(value, mn, mx) {
         ? (props.Tiban || props.Address)
         : latlng.lat.toFixed(4) + ', ' + latlng.lng.toFixed(4);
 
-      S.pins.push({ id, latlng, marker, ndvi, props, label });
+      S.pins.push({ id, latlng, marker, outer, ndvi, props, label });
       renderPinList();
     }
 
@@ -3934,7 +4227,9 @@ function getPinColor(value, mn, mx) {
     function removePin(id) {
       const idx = S.pins.findIndex(p => p.id === id);
       if (idx === -1) return;
-      S.pinLayer.removeLayer(S.pins[idx].marker);
+      const p = S.pins[idx];
+      if (p.marker) try { S.pinLayer.removeLayer(p.marker); } catch(_) {}
+      if (p.outer)  try { S.pinLayer.removeLayer(p.outer);  } catch(_) {}
       S.pins.splice(idx, 1);
       renderPinList();
     }
@@ -3950,10 +4245,13 @@ function getPinColor(value, mn, mx) {
         li.className = 'pin-item';
         const ndviStr = p.ndvi !== null ? p.ndvi.toFixed(4) : '—';
         const idxName = S._lastIndexName || 'NDVI';
+        const color = getPinColor(p.ndvi, S._lastMn, S._lastMx) || '#64748b';
         li.innerHTML =
           '<div class="pin-item-info">' +
             '<div class="pin-item-coords" title="' + escHtml(p.label) + '">#' + (i+1) + '  ' + escHtml(p.label) + '</div>' +
-            '<div class="pin-item-ndvi">' + idxName + ': ' + ndviStr + '</div>' +
+            '<div class="pin-item-ndvi" style="color:' + color + '">' + idxName + ': ' +
+              '<span style="font-weight:700;color:' + color + '">' + ndviStr + '</span>' +
+            '</div>' +
           '</div>' +
           '<button class="icon-btn danger" title="削除">✕</button>';
         li.querySelector('.icon-btn').addEventListener('click', () => removePin(p.id));
@@ -4425,9 +4723,10 @@ function getPinColor(value, mn, mx) {
       const nameVal  = p.name || p.NAME || p['名称'] || p['ほ場名'];
 
       const titleStr = tibanVal ? '地番: ' + tibanVal
-                     : addrVal ? addrVal
-                     : nameVal || 'ほ場';
-      titleEl.textContent = '📊 ' + titleStr;
+             : addrVal ? addrVal
+             : nameVal || 'ほ場';
+      // ヘッダー左に既にアイコンがあるため、ここではタイトルのみセットする
+      titleEl.textContent = titleStr;
 
       // メタ情報
       let meta = '';
@@ -4462,6 +4761,17 @@ function getPinColor(value, mn, mx) {
       setTimeout(() => {
         const { dates, indices, rows } = buildFieldTimeSeries(ring);
         renderFieldTable(rows, indices, dates);
+        
+        // ── popup で参照するために時系列データをキャッシュ ──
+        const cacheKey = 'field_' + Date.now();
+        _fieldTimeSeriesCache[cacheKey] = {
+          ring,
+          rows,
+          indices,
+          dates,
+          tibanVal,
+          addrVal
+        };
       }, 30);
     }
 
@@ -4551,11 +4861,16 @@ function getPinColor(value, mn, mx) {
           if (v === undefined || v === null) {
             html += '<td class="val-none">—</td>';
           } else {
-            let cls = 'val-low';
-            if (v >= 0.6) cls = 'val-high';
-            else if (v >= 0.4) cls = 'val-mid';
-            else if (v < 0) cls = 'val-neg';
-            html += '<td class="' + cls + '">' + v.toFixed(4) + '</td>';
+            // マップの凡例と同じカラースキームでセルを着色
+            const cmapMap = { NDVI:'ndvi', EVI:'ndvi', SAVI:'ndvi', MSAVI:'ndvi', GNDVI:'ndvi', RVI:'spectral' };
+            const cmap = cmapMap[idx] || 'ndvi';
+            const rangeMap = { ndvi: [-1, 1], spectral: [0, 10] };
+            const [mn, mx] = rangeMap[cmap] || [-1, 1];
+            const t = Math.max(0, Math.min(1, (v - mn) / ((mx - mn) || 1)));
+            const rgb = applyColormap(cmap, t, v);
+            const color = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+            const textClr = contrastTextColorFromRgbArray(rgb);
+            html += '<td style="background:' + color + ';color:' + textClr + ';font-weight:700;padding:6px 8px;border-radius:6px;">' + v.toFixed(4) + '</td>';
           }
         });
         html += '</tr>';
