@@ -4007,7 +4007,10 @@ function contrastTextColorFromRgbArray(rgb) {
 
       if (mergedProps && mergedProps.Address) {
         html += '<b style="font-size:13px">📍 ' + escHtml(mergedProps.Address) + '</b>';
-        if (mergedProps.Tiban) html += ' <span style="color:var(--muted)">地番: ' + escHtml(mergedProps.Tiban) + '</span>';
+        // ← 後で取得する cachedTibanArray を表示するためのプレースホルダーを設定
+        html += ' <span style="color:var(--muted)" id="popup-tiban-display">';
+        if (mergedProps.Tiban) html += '地番: ' + escHtml(mergedProps.Tiban);
+        html += '</span>';
         html += '<hr style="margin:5px 0;border:none;border-top:1px solid var(--border)">';
         // 主要プロパティ表示
         const SHOW_KEYS = [
@@ -4034,6 +4037,7 @@ function contrastTextColorFromRgbArray(rgb) {
       // ── 指数値表示 ──
       let displayValue = null;
       let debugInfo = '';
+      let cachedTibanArray = []; // ← キャッシュから取得した複数地番
       
       // ① キャッシュまたはピンクリック時の自動集計から値を取得
       let cacheFound = false;
@@ -4047,6 +4051,7 @@ function contrastTextColorFromRgbArray(rgb) {
           if (areRingsEqual(cached.ring, polygonRing)) {
             cacheFound = true;
             cachedRows = cached.rows;
+            cachedTibanArray = cached.tibanArray || [];  // ← キャッシュから複数地番を取得
             break;
           }
         }
@@ -4059,6 +4064,18 @@ function contrastTextColorFromRgbArray(rgb) {
             const tibanVal = p.Tiban || p.tiban || p['地番'] || null;
             const addrVal  = p.Address || p.address || p['住所'] || null;
             
+            // ← ポリゴン内のピンから複数地番を取得
+            const pinsInPolygon = [];
+            const tibanSet = new Set();
+            for (const pin of S.pins) {
+              if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, polygonRing)) {
+                pinsInPolygon.push(pin);
+                const tiban = pin.props && (pin.props.Tiban || pin.props.tiban || pin.props['地番']);
+                if (tiban) tibanSet.add(String(tiban));
+              }
+            }
+            const tibanArray = Array.from(tibanSet);
+            
             const cacheKey = 'field_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
             _fieldTimeSeriesCache[cacheKey] = {
               ring: polygonRing,
@@ -4066,9 +4083,12 @@ function contrastTextColorFromRgbArray(rgb) {
               indices,
               dates,
               tibanVal,
-              addrVal
+              tibanArray,      // ← 複数地番を保存
+              addrVal,
+              pinsInPolygon    // ← ポリゴン内のピンを保存
             };
             cachedRows = rows;
+            cachedTibanArray = tibanArray;  // ← popup で使用できるようにセット
             cacheFound = true;
           } catch (e) {
             console.warn('ピンクリック時の自動集計エラー:', e);
@@ -4708,17 +4728,29 @@ function contrastTextColorFromRgbArray(rgb) {
       // タイトル設定
       let p = feature && feature.properties || {};
       
-      // ポリゴン内に含まれるピンがあれば、そのプロパティを優先する
+      // ── ポリゴン内に含まれるすべてのピンを検出 ──
+      const pinsInPolygon = [];
+      const tibanSet = new Set();
+      
       if (ring && ring.length >= 3) {
         for (const pin of S.pins) {
           if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, ring)) {
-            p = { ...p, ...(pin.props || {}) };
-            break;
+            pinsInPolygon.push(pin);
+            // 地番を収集
+            const tiban = pin.props && (pin.props.Tiban || pin.props.tiban || pin.props['地番']);
+            if (tiban) tibanSet.add(String(tiban));
+            // 最初のピンのプロパティを基本として使用
+            if (pinsInPolygon.length === 1) {
+              p = { ...p, ...(pin.props || {}) };
+            }
           }
         }
       }
 
-      const tibanVal = p.Tiban || p.tiban || p['地番'];
+      // ── 地番表示（複数の場合はコンマ区切り） ──
+      const tibanArray = Array.from(tibanSet);
+      const tibanVal = tibanArray.length > 0 ? tibanArray.join(', ') 
+                     : (p.Tiban || p.tiban || p['地番'] || null);
       const addrVal  = p.Address || p.address || p['住所'];
       const nameVal  = p.name || p.NAME || p['名称'] || p['ほ場名'];
 
@@ -4770,7 +4802,9 @@ function contrastTextColorFromRgbArray(rgb) {
           indices,
           dates,
           tibanVal,
-          addrVal
+          tibanArray,      // ← 複数地番を配列で保存
+          addrVal,
+          pinsInPolygon    // ← ポリゴン内のピンを保存
         };
       }, 30);
     }
