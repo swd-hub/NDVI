@@ -512,6 +512,29 @@
     .map-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
     #map { flex: 1; }
 
+    /* マウス値ツールチップ */
+    #mouse-value-tooltip {
+      position: fixed;
+      background: rgba(15, 23, 42, 0.95);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      pointer-events: none;
+      z-index: 2000;
+      display: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      line-height: 1.4;
+      max-width: 200px;
+    }
+
+    #mouse-value-tooltip.show { display: block; }
+    #mouse-value-tooltip .coord { color: #cbd5e1; font-size: 0.65rem; margin-bottom: 4px; }
+    #mouse-value-tooltip .value { color: #059669; font-weight: 700; display: inline-block; margin-right: 8px; }
+
     .map-toolbar {
       position: absolute;
       top: 12px; right: 12px;
@@ -4007,10 +4030,7 @@ function contrastTextColorFromRgbArray(rgb) {
 
       if (mergedProps && mergedProps.Address) {
         html += '<b style="font-size:13px">📍 ' + escHtml(mergedProps.Address) + '</b>';
-        // ← 後で取得する cachedTibanArray を表示するためのプレースホルダーを設定
-        html += ' <span style="color:var(--muted)" id="popup-tiban-display">';
-        if (mergedProps.Tiban) html += '地番: ' + escHtml(mergedProps.Tiban);
-        html += '</span>';
+        if (mergedProps.Tiban) html += ' <span style="color:var(--muted)">地番: ' + escHtml(mergedProps.Tiban) + '</span>';
         html += '<hr style="margin:5px 0;border:none;border-top:1px solid var(--border)">';
         // 主要プロパティ表示
         const SHOW_KEYS = [
@@ -4037,7 +4057,6 @@ function contrastTextColorFromRgbArray(rgb) {
       // ── 指数値表示 ──
       let displayValue = null;
       let debugInfo = '';
-      let cachedTibanArray = []; // ← キャッシュから取得した複数地番
       
       // ① キャッシュまたはピンクリック時の自動集計から値を取得
       let cacheFound = false;
@@ -4051,7 +4070,6 @@ function contrastTextColorFromRgbArray(rgb) {
           if (areRingsEqual(cached.ring, polygonRing)) {
             cacheFound = true;
             cachedRows = cached.rows;
-            cachedTibanArray = cached.tibanArray || [];  // ← キャッシュから複数地番を取得
             break;
           }
         }
@@ -4064,18 +4082,6 @@ function contrastTextColorFromRgbArray(rgb) {
             const tibanVal = p.Tiban || p.tiban || p['地番'] || null;
             const addrVal  = p.Address || p.address || p['住所'] || null;
             
-            // ← ポリゴン内のピンから複数地番を取得
-            const pinsInPolygon = [];
-            const tibanSet = new Set();
-            for (const pin of S.pins) {
-              if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, polygonRing)) {
-                pinsInPolygon.push(pin);
-                const tiban = pin.props && (pin.props.Tiban || pin.props.tiban || pin.props['地番']);
-                if (tiban) tibanSet.add(String(tiban));
-              }
-            }
-            const tibanArray = Array.from(tibanSet);
-            
             const cacheKey = 'field_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
             _fieldTimeSeriesCache[cacheKey] = {
               ring: polygonRing,
@@ -4083,12 +4089,9 @@ function contrastTextColorFromRgbArray(rgb) {
               indices,
               dates,
               tibanVal,
-              tibanArray,      // ← 複数地番を保存
-              addrVal,
-              pinsInPolygon    // ← ポリゴン内のピンを保存
+              addrVal
             };
             cachedRows = rows;
-            cachedTibanArray = tibanArray;  // ← popup で使用できるようにセット
             cacheFound = true;
           } catch (e) {
             console.warn('ピンクリック時の自動集計エラー:', e);
@@ -4728,29 +4731,17 @@ function contrastTextColorFromRgbArray(rgb) {
       // タイトル設定
       let p = feature && feature.properties || {};
       
-      // ── ポリゴン内に含まれるすべてのピンを検出 ──
-      const pinsInPolygon = [];
-      const tibanSet = new Set();
-      
+      // ポリゴン内に含まれるピンがあれば、そのプロパティを優先する
       if (ring && ring.length >= 3) {
         for (const pin of S.pins) {
           if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, ring)) {
-            pinsInPolygon.push(pin);
-            // 地番を収集
-            const tiban = pin.props && (pin.props.Tiban || pin.props.tiban || pin.props['地番']);
-            if (tiban) tibanSet.add(String(tiban));
-            // 最初のピンのプロパティを基本として使用
-            if (pinsInPolygon.length === 1) {
-              p = { ...p, ...(pin.props || {}) };
-            }
+            p = { ...p, ...(pin.props || {}) };
+            break;
           }
         }
       }
 
-      // ── 地番表示（複数の場合はコンマ区切り） ──
-      const tibanArray = Array.from(tibanSet);
-      const tibanVal = tibanArray.length > 0 ? tibanArray.join(', ') 
-                     : (p.Tiban || p.tiban || p['地番'] || null);
+      const tibanVal = p.Tiban || p.tiban || p['地番'];
       const addrVal  = p.Address || p.address || p['住所'];
       const nameVal  = p.name || p.NAME || p['名称'] || p['ほ場名'];
 
@@ -4802,9 +4793,7 @@ function contrastTextColorFromRgbArray(rgb) {
           indices,
           dates,
           tibanVal,
-          tibanArray,      // ← 複数地番を配列で保存
-          addrVal,
-          pinsInPolygon    // ← ポリゴン内のピンを保存
+          addrVal
         };
       }, 30);
     }
@@ -5119,6 +5108,118 @@ function contrastTextColorFromRgbArray(rgb) {
         ul.appendChild(li);
       });
     }
+
+    // =====================================================
+    // マウス値リアルタイム表示
+    // =====================================================
+    let _mouseTooltipTimeout = null;
+    let _lastTooltipTime = 0;
+    const TOOLTIP_THROTTLE = 50; // ms
+
+    function showMouseValueTooltip(containerX, containerY, lat, lng, value) {
+      const tooltip = document.getElementById('mouse-value-tooltip');
+      if (!tooltip) return;
+
+      // 値のフォーマット
+      let valueHtml = '';
+      if (typeof value === 'object' && value !== null) {
+        // 複数の指数を表示
+        valueHtml = Object.entries(value)
+          .map(([k, v]) => `<span class="value">${k}: ${v.toFixed(4)}</span>`)
+          .join('&nbsp;&nbsp;');
+      } else if (typeof value === 'number') {
+        valueHtml = `<span class="value">${value.toFixed(4)}</span>`;
+      }
+
+      tooltip.innerHTML = 
+        `<div class="coord">Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)}</div>` +
+        `<div>${valueHtml}</div>`;
+      
+      // オフセット（カーソルの右下）
+      const offsetX = 12;
+      const offsetY = 12;
+      
+      tooltip.style.left = (containerX + offsetX) + 'px';
+      tooltip.style.top = (containerY + offsetY) + 'px';
+      tooltip.classList.add('show');
+    }
+
+    function hideMouseValueTooltip() {
+      const tooltip = document.getElementById('mouse-value-tooltip');
+      if (tooltip) tooltip.classList.remove('show');
+    }
+
+    function getValueAtMousePos(lat, lng) {
+      if (!S.currentData || !S.currentBbox || S.currentWidth === 0 || S.currentHeight === 0) {
+        return null;
+      }
+
+      const [west, south, east, north] = S.currentBbox;
+
+      // 座標範囲チェック
+      if (lng < west || lng > east || lat < south || lat > north) {
+        return null;
+      }
+
+      const W = S.currentWidth;
+      const H = S.currentHeight;
+
+      // 緯度経度 → ピクセル座標
+      const px = ((lng - west) / (east - west)) * W;
+      const py = ((north - lat) / (north - south)) * H;
+
+      const x = Math.floor(px);
+      const y = Math.floor(py);
+
+      if (x < 0 || x >= W || y < 0 || y >= H) {
+        return null;
+      }
+
+      const idx = y * W + x;
+      if (idx < 0 || idx >= S.currentData.length) {
+        return null;
+      }
+
+      return S.currentData[idx];
+    }
+
+    // ブラウザ側でのマウストラッキング
+    document.addEventListener('mousemove', (e) => {
+      const now = Date.now();
+      if (now - _lastTooltipTime < TOOLTIP_THROTTLE) return;
+      _lastTooltipTime = now;
+
+      // マップコンテナの判定
+      const mapEl = document.getElementById('map');
+      if (!mapEl) return;
+      const mapRect = mapEl.getBoundingClientRect();
+      const isInMap = e.clientX >= mapRect.left && e.clientX <= mapRect.right &&
+                     e.clientY >= mapRect.top && e.clientY <= mapRect.bottom;
+
+      if (!isInMap) {
+        hideMouseValueTooltip();
+        return;
+      }
+
+      // マップイベントからマウス位置の緯度経度を取得
+      if (!S.map) return;
+      const bounds = S.map.getBounds();
+      const containerPoint = S.map.mouseEventToContainerPoint(e);
+      const latlng = S.map.containerPointToLatLng(containerPoint);
+
+      const value = getValueAtMousePos(latlng.lat, latlng.lng);
+      if (value !== null && !isNaN(value)) {
+        showMouseValueTooltip(e.clientX, e.clientY, latlng.lat, latlng.lng, value);
+      } else {
+        hideMouseValueTooltip();
+      }
+    });
+
+    document.addEventListener('mouseleave', hideMouseValueTooltip);
   </script>
+
+  <!-- マウス値ツールチップ -->
+  <div id="mouse-value-tooltip"></div>
+
 </body>
 </html>
