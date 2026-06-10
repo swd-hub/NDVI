@@ -4731,17 +4731,38 @@ function contrastTextColorFromRgbArray(rgb) {
       // タイトル設定
       let p = feature && feature.properties || {};
       
-      // ポリゴン内に含まれるピンがあれば、そのプロパティを優先する
+      // ポリゴン内に含まれるすべてのピンを収集
+      const containedPins = [];
+      const tibanArray = [];
+      console.log('🔍 openFieldPanel:', { pinsTotal: S.pins.length, ringLen: ring?.length });
+      
       if (ring && ring.length >= 3) {
         for (const pin of S.pins) {
           if (pointInPolygon(pin.latlng.lat, pin.latlng.lng, ring)) {
-            p = { ...p, ...(pin.props || {}) };
-            break;
+            containedPins.push(pin);
+            console.log('📍 ピン発見:', pin.props);
+            
+            if (!p.Tiban && !p.tiban && !p['地番'] && pin.props) {
+              p = { ...p, ...(pin.props || {}) };
+            }
+            // 地番を集集
+            const tiban = pin.props?.Tiban || pin.props?.tiban || pin.props?.['地番'];
+            console.log('📌 地番:', tiban);
+            if (tiban) tibanArray.push(String(tiban));
           }
         }
       }
 
-      const tibanVal = p.Tiban || p.tiban || p['地番'];
+      console.log('✅ 地番配列:', tibanArray);
+
+      // ポリゴンのプロパティから地番を取得（ピンから取得できない場合）
+      let tibanVal = tibanArray.length > 0 ? tibanArray.join(', ') : null;
+      if (!tibanVal) {
+        tibanVal = p.Tiban || p.tiban || p['地番'];
+      }
+      
+      console.log('🎯 最終tibanVal:', tibanVal);
+      
       const addrVal  = p.Address || p.address || p['住所'];
       const nameVal  = p.name || p.NAME || p['名称'] || p['ほ場名'];
 
