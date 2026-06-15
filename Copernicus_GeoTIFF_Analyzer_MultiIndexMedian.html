@@ -1259,7 +1259,7 @@
           <div class="stats-mini">
             <div class="scard"><div class="sk">最小</div><div class="sv" id="vMin">—</div></div>
             <div class="scard"><div class="sk">最大</div><div class="sv" id="vMax">—</div></div>
-            <div class="scard"><div class="sk">平均</div><div class="sv" id="vMean">—</div></div>
+            <div class="scard"><div class="sk">平均</div><div class="sv" id="vMedian">—</div></div>
             <div class="scard" style="grid-column: span 3;">
               <div class="sk">座標系</div>
               <div class="sv" id="vEPSG" style="font-size:0.75rem">—</div>
@@ -2827,14 +2827,14 @@ function refreshSelects() {
       S._pendingSourceFile = name;
       clearSourceOverlay(name);
 
-      const { data: ndvi, mn, mx, mean, cnt } = calcIndex('ndvi', red, nir, null, null, 0.5);
+      const { data: ndvi, mn, mx, median, cnt } = calcIndex('ndvi', red, nir, null, null, 0.5);
 
       S.currentData   = ndvi;
       S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
       S.currentWidth  = width;
       S.currentHeight = height;
 
-      showStats(mn, mx, mean, epsg);
+      showStats(mn, mx, median, epsg);
       renderOverlay(ndvi, width, height, reprojBbox, 'ndvi', mn, mx);
       drawColorbar('ndvi', mn, mx, 'NDVI 値');
       updateIndexLabels('NDVI');
@@ -3078,7 +3078,7 @@ function refreshSelects() {
         if (v < mn) mn = v;
         if (v > mx) mx = v;
       }
-      return { data: out, mn, mx, mean: cnt > 0 ? sum / cnt : 0, cnt };
+      return { data: out, mn, mx, median: cnt > 0 ? sum / cnt : 0, cnt };
     }
 
     // =====================================================
@@ -3153,7 +3153,7 @@ function refreshSelects() {
         const ts = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
         S._pendingLabel = `${indexName} ${shortName(srcFile)} ${ts}`;
 
-        const { data: result, mn, mx, mean, cnt } = calcIndex(indexType, red, nir, blue, green, L);
+        const { data: result, mn, mx, median, cnt } = calcIndex(indexType, red, nir, blue, green, L);
 
         S.currentData   = result;
         S.currentBbox   = [reprojBbox.west, reprojBbox.south, reprojBbox.east, reprojBbox.north];
@@ -3165,7 +3165,7 @@ function refreshSelects() {
         const RVI_MAX = 10;
         const renderMn = indexType === 'rvi' ? 0       : mn;
         const renderMx = indexType === 'rvi' ? RVI_MAX : mx;
-        showStats(mn, mx, mean, epsg);
+        showStats(mn, mx, median, epsg);
         renderOverlay(result, width, height, reprojBbox, cmap, renderMn, renderMx);
         drawColorbar(cmap, renderMn, renderMx, indexName + ' 値');
         updateIndexLabels(indexName);
@@ -3748,10 +3748,10 @@ async function computeRGBComposite(type){
       }
     }
 
-    function showStats(mn, mx, mean, epsg) {
+    function showStats(mn, mx, median, epsg) {
       document.getElementById('vMin').textContent  = isFinite(mn)   ? mn.toFixed(4)   : '—';
       document.getElementById('vMax').textContent  = isFinite(mx)   ? mx.toFixed(4)   : '—';
-      document.getElementById('vMean').textContent = isFinite(mean) ? mean.toFixed(4) : '—';
+      document.getElementById('vMedian').textContent = isFinite(median) ? median.toFixed(4) : '—';
       document.getElementById('vEPSG').textContent = epsg ? 'EPSG:' + epsg : '不明';
       document.getElementById('sec-stats').style.display = '';
     }
@@ -4127,8 +4127,8 @@ function contrastTextColorFromRgbArray(rgb) {
               const idx = getIndexFromFilename(fileName);
               if (idx === indexName) {
                 const res = computePolygonMedian(fileName, polygonRing);
-                if (res && res.mean !== null) {
-                  displayValue = res.mean;
+                if (res && res.median !== null) {
+                  displayValue = res.median;
                   debugInfo = '(直接計算)';
                   break;
                 }
@@ -4141,8 +4141,8 @@ function contrastTextColorFromRgbArray(rgb) {
               const key = keyMap[indexName];
               if (key) {
                 const res = computePolygonIndexFromRaw(currentDate, key, polygonRing);
-                if (res && res.mean !== null) {
-                  displayValue = res.mean;
+                if (res && res.median !== null) {
+                  displayValue = res.median;
                   debugInfo = '(生バンドから計算)';
                 }
               }
@@ -4456,7 +4456,7 @@ function computePolygonMedian(fileKey, ring) {
           sum += v; cnt++;
         }
       }
-      return cnt > 0 ? { mean: sum/cnt, cnt } : null;
+      return cnt > 0 ? { median: sum/cnt, cnt } : null;
     }
 
     // =====================================================
@@ -4663,7 +4663,7 @@ function computePolygonMedian(fileKey, ring) {
           sum+=v; cnt++;
         }
       }
-      return cnt>0 ? {mean:sum/cnt, cnt} : null;
+      return cnt>0 ? {median:sum/cnt, cnt} : null;
     }
 
     // 全ファイルを集計して {rows, indices} を返す
@@ -4679,7 +4679,7 @@ function computePolygonMedian(fileKey, ring) {
         const res = computePolygonMedian(name, ring);
         if (!res) continue;
         if (!map[date]) map[date] = { date };
-        map[date][idx]          = res.mean;
+        map[date][idx]          = res.median;
         map[date][idx + '_cnt'] = res.cnt;
         indicesFound.add(idx);
       }
@@ -4706,7 +4706,7 @@ function computePolygonMedian(fileKey, ring) {
           const res = computePolygonIndexFromRaw(date, key, ring);
           if (!res) continue;
           if (!map[date]) map[date] = { date };
-          map[date][name]          = res.mean;
+          map[date][name]          = res.median;
           map[date][name + '_cnt'] = res.cnt;
           indicesFound.add(name);
         }
