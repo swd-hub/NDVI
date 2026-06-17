@@ -687,6 +687,7 @@
 
             const workEventPlugin = {
                 id: 'workEventPlugin',
+// 修正対象のブロック（396行目〜433行目付近）
                 afterDatasetsDraw(chart) {
                     const ctx = chart.ctx;
                     const xScale = chart.scales.x;
@@ -716,12 +717,16 @@
 
                         const workTypeJP = getWorkTypeJP(work.workType);
                         ctx.fillStyle = getWorkColorLine(work.workType);
-                        ctx.font = '15px sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(workTypeJP, xPixel, chartTop - 5);
+                        // ★ここから修正：文字をチャート内に配置し、点線の左側に寄せる
+                        ctx.font = 'bold 12px sans-serif'; // フォントを少し小さく、太字に
+                        ctx.textAlign = 'right'; // テキストを右寄せ（点線の左側に表示）
+                        // 縦位置は chartTop + 15 (チャートの上端から下に15px) に変更
+                        // 横位置は xPixel - 5 (点線から左に5px) に変更
+                        ctx.fillText(workTypeJP, xPixel - 5, chartTop + 15);
+                        // ★修正ここまで
                     });
                 }
-            };
+                            };
 
             timeSeriesChart = new Chart(ctx, {
                 type: 'line',
