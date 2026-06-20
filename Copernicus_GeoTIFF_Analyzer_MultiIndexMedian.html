@@ -233,6 +233,15 @@
     .file-item:hover { background: #f0fdf4; border-left-color: var(--accent); }
     .file-item.active { background: #f0fdf4; border-left-color: #16a34a; }
 
+    .file-item-checkbox {
+      flex-shrink: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+      margin: 0;
+    }
+
     .file-item-info { flex: 1; min-width: 0; pointer-events: none; }
     .file-item-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .file-item-meta { font-size: 0.65rem; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
@@ -1321,27 +1330,37 @@
           <button class="fsp-close" onclick="closeFieldPanel()" title="閉じる">✕</button>
         </div>
         <div class="fsp-meta" id="fsp-meta"></div>
+        <div id="fsp-shape-container" style="display:none; margin-top: 14px; text-align: center; padding-bottom: 14px;">
+          <div class="fsp-section-title" style="margin-top:0; justify-content:center;">対象ポリゴン形状</div>
+          <canvas id="fsp-shape-canvas" style="width: 50%; background: var(--panel); margin: 10px auto; display: block; border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);"></canvas>
+          <div style="margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <div id="fsp-shape-name" style="font-size: 0.8rem; color: var(--accent); font-weight: 700; font-family: var(--sans); background: rgba(5,150,105,0.05); border: 1px solid rgba(5,150,105,0.2); display: inline-block; padding: 6px 12px; border-radius: 6px;"></div>
+            <button id="fsp-csv-btn" style="display:none; padding: 6px 14px; background: #059669; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: var(--sans); font-weight: 600; white-space: nowrap;">📊 CSV</button>
+          </div>
+        </div>
         <div class="fsp-body">
           <div class="fsp-section-title">時系列グラフ（中央値）</div>
           <div class="fsp-chart-wrap">
             <canvas id="fsp-chart" height="250"></canvas>
           </div>
-          <div class="fsp-section-title" style="margin-top:14px;">日付別 指数値（中央値）</div>
+          <div class="fsp-section-title" style="margin-top:14px;">f(x) = x^2</div>
+          <div class="fsp-chart-wrap">
+            <canvas id="fsp-func-x2-chart" height="250"></canvas>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top:14px; margin-bottom: 10px;">
+            <div class="fsp-section-title" style="margin:0;">日付別 指数値（中央値）</div>
+            <button id="fsp-table-csv-btn" style="padding: 6px 14px; background: #059669; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: var(--sans); font-weight: 600; white-space: nowrap;">📋 CSV</button>
+          </div>
           <div class="fsp-table-wrap">
             <div id="fsp-table-container">
               <div class="fsp-empty">ほ場をクリックすると表示されます</div>
             </div>
           </div>
-          <div id="fsp-shape-container" style="display:none; margin-top: 20px; text-align: center; padding-bottom: 20px;">
-            <div class="fsp-section-title" style="margin-top:0; justify-content:center;">対象ポリゴン形状</div>
-            <canvas id="fsp-shape-canvas" style="width: 50%; background: var(--panel); margin: 10px auto; display: block; border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);"></canvas>
-            <div id="fsp-shape-name" style="margin-top: 10px; font-size: 0.8rem; color: var(--accent); font-weight: 700; font-family: var(--sans); background: rgba(5,150,105,0.05); border: 1px solid rgba(5,150,105,0.2); display: inline-block; padding: 6px 12px; border-radius: 6px;"></div>
-          </div>
         </div>
       </div>
       <div id="map"></div>
       <div class="map-toolbar">
-        <button class="tbtn" id="btn-draw">📐 領域指定 (ヒストグラム)</button>
+        <button class="tbtn" id="btn-draw">📐 自由四角形 (ヒストグラム)</button>
         <button class="tbtn" id="btn-clear-draw">🗑 選択クリア</button>
         <button class="tbtn" id="btn-save-png">💾 PNG保存</button>
       </div>
@@ -1383,13 +1402,51 @@
     function getGithubConfig() {
       const textInput = document.getElementById('folderPathInput');
       const customPath = textInput ? textInput.value.trim() : '';
+      
+      // ── URLが入力されている場合 ──
+      if (customPath.startsWith('http')) {
+        return parseGithubUrl(customPath);
+      }
+      
+      // ── パスが入力されている場合（デフォルトリポジトリを使用） ──
       if (customPath) {
         return Object.assign({}, GITHUB_BASE, { path: customPath });
       }
+      
+      // ── ドロップダウン選択を使用 ──
       const sel = document.getElementById('folderSelect');
       const idx = sel ? parseInt(sel.value, 10) : 0;
       const folder = FOLDER_LIST[idx] || FOLDER_LIST[0];
       return Object.assign({}, GITHUB_BASE, { path: folder.path });
+    }
+
+    // GitHub URLをパースして設定を取得
+    function parseGithubUrl(url) {
+      // https://github.com/owner/repo/tree/branch/path または
+      // https://raw.githubusercontent.com/owner/repo/branch/path 形式に対応
+      let match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/tree\/([^\/]+)\/(.+)/);
+      if (match) {
+        return {
+          owner: match[1],
+          repo: match[2],
+          branch: match[3],
+          path: match[4]
+        };
+      }
+      
+      match = url.match(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/);
+      if (match) {
+        return {
+          owner: match[1],
+          repo: match[2],
+          branch: match[3],
+          path: match[4]
+        };
+      }
+      
+      // パースに失敗した場合はデフォルトを返す
+      console.warn('Invalid GitHub URL format:', url);
+      return GITHUB_BASE;
     }
 
     function clearFolderPathInput() {
@@ -1523,10 +1580,49 @@ async function getAllFilesFromDB() {
       _pendingSourceFile: null,
       // ── 読み込み中断 ──
       abortController: null,
-      loadAborted: false
+      loadAborted: false,
+      // ── チェックボックス状態（未チェックのみ記録、デフォルトは全TIFF利用） ──
+      uncheckedFiles: new Set()
     };
 
     let tsChart = null;
+
+    // ──────────────────────────────────────────────────
+    // チェックボックス状態管理ヘルパー関数
+    // ──────────────────────────────────────────────────
+    function getCheckedFileNames() {
+      return Object.keys(S.files).filter(name => isFileChecked(name));
+    }
+
+    function isFileChecked(fileName) {
+      return !S.uncheckedFiles.has(fileName);
+    }
+
+    function setFileChecked(fileName, checked) {
+      if (checked) {
+        S.uncheckedFiles.delete(fileName);
+      } else {
+        S.uncheckedFiles.add(fileName);
+      }
+    }
+
+    function checkAllFiles() {
+      S.uncheckedFiles.clear();
+      renderFileList();
+      refreshSelects();
+      updateFilterOptions();
+    }
+
+    function uncheckAllFiles() {
+      S.uncheckedFiles = new Set(Object.keys(S.files));
+      renderFileList();
+      refreshSelects();
+      updateFilterOptions();
+    }
+
+    window.getCheckedFileNames = getCheckedFileNames;
+    window.checkAllFiles = checkAllFiles;
+    window.uncheckAllFiles = uncheckAllFiles;
 
     const PRESETS = {
       izumo:   { center: [35.367, 132.755], zoom: 11 },
@@ -1624,8 +1720,8 @@ async function getAllFilesFromDB() {
         S.map.addLayer(S.drawnItems);
         S.drawControl = new L.Control.Draw({
           draw: {
-            polyline: false, polygon: true, circle: false, marker: false, circlemarker: false,
-            rectangle: { shapeOptions: { color: '#059669', weight: 2 } }
+            polyline: false, polygon: { shapeOptions: { color: '#059669', weight: 2 } }, circle: false, marker: false, circlemarker: false,
+            rectangle: false
           },
           edit: false
         });
@@ -1783,6 +1879,7 @@ async function getAllFilesFromDB() {
       sel.addEventListener('change', () => {
         // ファイルリストをリセットしてから再フェッチ
         Object.keys(S.files).forEach(k => delete S.files[k]);
+        S.uncheckedFiles.clear();
         document.getElementById('fileList').innerHTML = '';
         document.getElementById('sec-band').style.display = 'none';
         document.getElementById('sec-stats').style.display = 'none';
@@ -1909,7 +2006,7 @@ async function getAllFilesFromDB() {
 
       document.getElementById('btn-draw').addEventListener('click', () => {
         if (!S.currentData) { setStatus('先に画像を計算・表示してください', 'error'); return; }
-        new L.Draw.Rectangle(S.map, S.drawControl.options.draw.rectangle).enable();
+        new L.Draw.Polygon(S.map, S.drawControl.options.draw.polygon).enable();
       });
 
       document.getElementById('btn-clear-draw').addEventListener('click', () => {
@@ -1979,6 +2076,7 @@ async function getAllFilesFromDB() {
           if (cached) deleteCache(cached.id);
           if (S.activeFileName === name) S.activeFileName = null;
           delete S.files[name];
+          S.uncheckedFiles.delete(name);
           deleteFileFromDB(name).then(() => updateDBStatusBadge()); // IndexedDBからも削除
           updateFilterOptions();
           renderFileList();
@@ -1990,12 +2088,10 @@ async function getAllFilesFromDB() {
           return;
         }
 
-        // ラジオ自体のクリックは change イベントで処理済み
-        if (e.target.type === 'radio') return;
+        // チェックボックス自体のクリックは change イベントで処理済み
+        if (e.target.type === 'checkbox') return;
 
-        // 行クリック → ラジオ選択して切り替え
-        const radio = item.querySelector('input[type=radio]');
-        if (radio) radio.checked = true;
+        // 行クリック → 表示切り替え
         switchToTif(name);
       });
     }
@@ -2402,6 +2498,7 @@ async function loadFiles(files, isRestoring = false) {
       const dates = new Set();
       const indices = new Set(['NDVI', 'EVI', 'SAVI', 'MSAVI', 'GNDVI', 'RVI']);
       for (const name in S.files) {
+        if (!isFileChecked(name)) continue;
         dates.add(getDateFromFilename(name));
         const idx = getIndexFromFilename(name);
         if (idx !== 'OTHER') indices.add(idx);
@@ -2439,7 +2536,9 @@ function autoSelectBands() {
       if (!targetDate) return;
 
       const indexType = document.getElementById('indexType').value;
-      const dateFiles = Object.keys(S.files).filter(name => getDateFromFilename(name) === targetDate);
+      const dateFiles = Object.keys(S.files).filter(name =>
+        getDateFromFilename(name) === targetDate && isFileChecked(name)
+      );
       if (dateFiles.length === 0) return;
 
       let b02_f = null, b03_f = null, b04_f = null, b08_f = null, b11_f = null;
@@ -2525,19 +2624,21 @@ function autoSelectBands() {
         li.dataset.name = name;
         li.title = name;
 
-        // ── ラジオボタン ──
-        const controlArea = document.createElement('div');
-        controlArea.style.width = '14px';
-        controlArea.style.flexShrink = '0';
-        if (idx !== 'OTHER') {
-          const radio = document.createElement('input');
-          radio.type = 'radio';
-          radio.name = 'tif-select';
-          radio.checked = isActive;
-          radio.style.cssText = 'accent-color:var(--accent);cursor:pointer;width:14px;height:14px;margin:0;display:block;';
-          radio.addEventListener('change', () => switchToTif(name));
-          controlArea.appendChild(radio);
-        }
+        // ── 利用TIFF選択チェックボックス（デフォルト全チェック） ──
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'file-item-checkbox';
+        checkbox.checked = isFileChecked(name);
+        checkbox.title = 'このTIFFを利用する';
+        checkbox.addEventListener('click', e => e.stopPropagation());
+        checkbox.addEventListener('change', () => {
+          setFileChecked(name, checkbox.checked);
+          refreshSelects();
+          updateFilterOptions();
+          updateAutoDateSelect();
+          autoSelectBands();
+          if (checkbox.checked) switchToTif(name);
+        });
 
         const info = document.createElement('div');
         info.className = 'file-item-info';
@@ -2551,7 +2652,7 @@ function autoSelectBands() {
         btn.textContent = '✕';
         btn.title = '削除';
 
-        li.appendChild(controlArea);
+        li.appendChild(checkbox);
         li.appendChild(info);
         li.appendChild(btn);
         ul.appendChild(li);
@@ -2597,6 +2698,7 @@ function autoSelectBands() {
 
       // S.files を全クリア
       for (const k of Object.keys(S.files)) delete S.files[k];
+      S.uncheckedFiles.clear();
 
       // IndexedDB も消去
       clearDB().then(() => updateDBStatusBadge());
@@ -2654,6 +2756,7 @@ function refreshSelects() {
         if (!sel) return;
         sel.innerHTML = '<option value="">-- 選択 --</option>';
         for (const name in S.files) {
+          if (!isFileChecked(name)) continue;
           const f = S.files[name];
           for (let b = 0; b < f.bands; b++) {
             const label = shortName(name) + ' — B' + (b + 1);
@@ -2690,7 +2793,7 @@ function refreshSelects() {
         if (rv) filenames.push(parseBandVal(rv)[0]);
         if (nv) filenames.push(parseBandVal(nv)[0]);
         if (filenames.length === 0) {
-          filenames = Object.keys(S.files);
+          filenames = Object.keys(S.files).filter(name => isFileChecked(name));
         }
       }
 
@@ -4140,7 +4243,9 @@ function contrastTextColorFromRgbArray(rgb) {
         try {
           if (polygonRing) {
             // 計算済み指数ファイルを試す
-            const fileNames = Object.keys(S.files).filter(name => getDateFromFilename(name) === currentDate);
+            const fileNames = Object.keys(S.files).filter(name =>
+              getDateFromFilename(name) === currentDate && isFileChecked(name)
+            );
             for (const fileName of fileNames) {
               const idx = getIndexFromFilename(fileName);
               if (idx === indexName) {
@@ -4309,6 +4414,7 @@ function contrastTextColorFromRgbArray(rgb) {
     // ほ場ポリゴン時系列分析
     // =====================================================
     let _fspChart = null;
+    let _fspFuncX2Chart = null;
 
     // 点が多角形内にあるか（レイキャスティング法）
     // ring: [{lat,lng},...] または [[lat,lng],...]
@@ -4401,6 +4507,7 @@ function computePolygonMedian(fileKey, ring) {
       // この日付の生バンドファイルを収集
       const bandFiles = {};
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getDateFromFilename(name) !== date) continue;
         const b = getBandFromFilename(name);
         if (b) bandFiles[b] = S.files[name];
@@ -4485,6 +4592,7 @@ function computePolygonMedian(fileKey, ring) {
       if (!sel) return;
       const dates = new Set();
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getBandFromFilename(name)) dates.add(getDateFromFilename(name));
       }
       const prev = sel.value;
@@ -4515,6 +4623,7 @@ function computePolygonMedian(fileKey, ring) {
       const needs = BAND_NEEDS[indexType] || {};
       const bandFile = {};
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getDateFromFilename(name) !== date) continue;
         const b = getBandFromFilename(name);
         if (b) bandFile[b] = name;
@@ -4548,6 +4657,7 @@ function computePolygonMedian(fileKey, ring) {
 
       // その日のファイルを収集
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getDateFromFilename(name) !== date) continue;
         const b = getBandFromFilename(name);
         if (b) bandFile[b] = name;
@@ -4615,6 +4725,7 @@ function computePolygonMedian(fileKey, ring) {
       const needs = BAND_NEEDS[indexType] || BAND_NEEDS.ndvi;
       const bandFiles = {};
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getDateFromFilename(name) !== date) continue;
         const b = getBandFromFilename(name);
         if (b) bandFiles[b] = S.files[name];
@@ -4684,6 +4795,7 @@ function computePolygonMedian(fileKey, ring) {
 
       // ── ① 計算済み指数ファイル（_NDVI.tiff 等）──
       for (const name in S.files) {
+        if (!isFileChecked(name)) continue;
         const date = getDateFromFilename(name);
         const idx  = getIndexFromFilename(name);
         if (idx === 'OTHER') continue;
@@ -4707,6 +4819,7 @@ function computePolygonMedian(fileKey, ring) {
       // 生バンドが存在する日付を抽出
       const rawDates = new Set();
       for (const name of Object.keys(S.files)) {
+        if (!isFileChecked(name)) continue;
         if (getBandFromFilename(name)) rawDates.add(getDateFromFilename(name));
       }
 
@@ -4791,8 +4904,8 @@ function computePolygonMedian(fileKey, ring) {
       const titleStr = tibanVal ? '地番: ' + tibanVal
              : addrVal ? addrVal
              : nameVal || 'ほ場';
-      // ヘッダー左に既にアイコンがあるため、ここではタイトルのみセットする
       titleEl.textContent = titleStr;
+      
 
       // メタ情報
       let meta = '';
@@ -4809,6 +4922,7 @@ function computePolygonMedian(fileKey, ring) {
       const shapeContainer = document.getElementById('fsp-shape-container');
       const shapeCanvas = document.getElementById('fsp-shape-canvas');
       const shapeName = document.getElementById('fsp-shape-name');
+      const csvBtn = document.getElementById('fsp-csv-btn');
       
       if (shapeContainer && shapeCanvas && shapeName) {
         shapeContainer.style.display = 'block';
@@ -4821,6 +4935,14 @@ function computePolygonMedian(fileKey, ring) {
 
         shapeName.innerHTML = '<span style="color:var(--muted);font-size:0.65rem;">' + escHtml(label) + '</span><br><span style="font-size:0.85rem;">' + escHtml(val) + '</span>';
         drawPolygonShape(shapeCanvas, ring);
+        
+        // CSVボタン処理
+        if (csvBtn) {
+          csvBtn.style.display = 'inline-block';
+          csvBtn.onclick = function() {
+            prepareCSVExport(ring, tibanVal || addrVal || nameVal || 'polygon');
+          };
+        }
       }
 
       // 非同期で集計（UIをブロックしないよう setTimeout）
@@ -4945,8 +5067,40 @@ function computePolygonMedian(fileKey, ring) {
       html += '</tbody></table>';
       tableEl.innerHTML = html;
 
+      // ── テーブルCSVコピーボタン ──
+      const csvBtn = document.getElementById('fsp-table-csv-btn');
+      if (csvBtn) {
+        csvBtn.onclick = () => {
+          const csv = convertTableToCSV(rows, indices, dates);
+          navigator.clipboard.writeText(csv).then(() => {
+            csvBtn.textContent = '✅ コピー完了';
+            setTimeout(() => { csvBtn.textContent = '📋 CSV'; }, 2000);
+          }).catch(err => {
+            console.error('Clipboard error:', err);
+            alert('クリップボードへのコピーに失敗しました');
+          });
+        };
+      }
+
       // ── グラフ ──
       renderFieldChart(dates, rows, indices);
+    }
+
+    function convertTableToCSV(rows, indices, dates) {
+      const lines = [];
+      // ヘッダー
+      const header = ['日付', ...indices];
+      lines.push(header.join(','));
+      // データ
+      rows.forEach(row => {
+        const cells = [row.date];
+        indices.forEach(idx => {
+          const v = row[idx];
+          cells.push(v === undefined || v === null ? '' : v.toFixed(4));
+        });
+        lines.push(cells.join(','));
+      });
+      return lines.join('\n');
     }
 
     function renderFieldChart(dates, rows, indices) {
@@ -4971,11 +5125,22 @@ function computePolygonMedian(fileKey, ring) {
         return;
       }
 
+      // ── 日数ベースのx軸を計算 ──
+      const firstDate = new Date(dates[0]);
+      const dateNumericValues = dates.map(d => {
+        const date = new Date(d);
+        const daysSinceFirst = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24));
+        return daysSinceFirst;
+      });
+
       const datasets = indices.map(idx => {
         const pal = IDX_PALETTE[idx] || { border:'#64748b', bg:'rgba(100,116,139,0.1)' };
         return {
           label: idx,
-          data: rows.map(r => r[idx] !== undefined ? r[idx] : null),
+          data: rows.map((r, i) => ({
+            x: dateNumericValues[i],
+            y: r[idx] !== undefined ? r[idx] : null
+          })),
           borderColor: pal.border,
           backgroundColor: pal.bg,
           borderWidth: 2,
@@ -4989,7 +5154,7 @@ function computePolygonMedian(fileKey, ring) {
 
       _fspChart = new Chart(ctx, {
         type: 'line',
-        data: { labels: dates, datasets },
+        data: { datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -5000,14 +5165,131 @@ function computePolygonMedian(fileKey, ring) {
               labels: { font: { size: 10 }, boxWidth: 12 }
             },
             tooltip: {
-              callbacks: {
-                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(4) : '—')
-              }
+              enabled: false
             }
           },
           scales: {
-            x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
-            y: { min: 0,max: 1,ticks: { font: { size: 10 } }, title: { display: true, text: '指数値', font: { size: 9 } } }
+            x: {
+              type: 'linear',
+              position: 'bottom',
+              ticks: {
+                font: { size: 10 },
+                maxRotation: 45,
+                callback: (value) => {
+                  const dateObj = new Date(firstDate);
+                  dateObj.setDate(dateObj.getDate() + value);
+                  return dateObj.toISOString().split('T')[0];
+                }
+              },
+              title: { display: true, text: '日付（第1観測日からの日数）', font: { size: 9 } }
+            },
+            y: {
+              min: 0,
+              max: 1,
+              ticks: { font: { size: 10 } },
+              title: { display: true, text: '指数値', font: { size: 9 } }
+            }
+          }
+        }
+      });
+
+      // ── f(x) = x^2 グラフ ──
+      renderFunctionX2Chart(dates, rows, indices);
+    }
+
+
+    function renderFunctionX2Chart(dates, rows, indices) {
+      if (_fspFuncX2Chart) { _fspFuncX2Chart.destroy(); _fspFuncX2Chart = null; }
+      
+      const canvasEl = document.getElementById('fsp-func-x2-chart');
+      if (!canvasEl) return;
+      
+      const ctx = canvasEl.getContext('2d');
+
+      const IDX_PALETTE = {
+        NDVI:  { border:'#16a34a', bg:'rgba(22,163,74,0.12)' },
+        EVI:   { border:'#3b82f6', bg:'rgba(59,130,246,0.12)' },
+        SAVI:  { border:'#f59e0b', bg:'rgba(245,158,11,0.12)' },
+        MSAVI: { border:'#8b5cf6', bg:'rgba(139,92,246,0.12)' },
+        GNDVI: { border:'#06b6d4', bg:'rgba(6,182,212,0.12)' }
+      };
+
+      if (dates.length === 0) {
+        _fspFuncX2Chart = new Chart(ctx, {
+          type: 'line',
+          data: { datasets: [] },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } } }
+        });
+        return;
+      }
+
+      // ── 日数ベースのx軸を計算 ──
+      const firstDate = new Date(dates[0]);
+      const dateNumericValues = dates.map(d => {
+        const date = new Date(d);
+        const daysSinceFirst = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24));
+        return daysSinceFirst;
+      });
+
+      // ── 指数ごとに時系列データを構築（f(x) = x^2） ──
+      const datasets = indices.map(idx => {
+        const pal = IDX_PALETTE[idx] || { border:'#64748b', bg:'rgba(100,116,139,0.1)' };
+        return {
+          label: idx,
+          data: rows.map((r, i) => ({
+            x: dateNumericValues[i],
+            y: r[idx] !== undefined && r[idx] !== null ? Math.pow(r[idx], 2) : null
+          })),
+          borderColor: pal.border,
+          backgroundColor: pal.bg,
+          borderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: pal.border,
+          fill: indices.length === 1,
+          tension: 0.3,
+          spanGaps: true
+        };
+      });
+
+      _fspFuncX2Chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: indices.length > 1,
+              labels: { font: { size: 10 }, boxWidth: 12 }
+            },
+            tooltip: {
+              enabled: false
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              position: 'bottom',
+              ticks: {
+                font: { size: 10 },
+                maxRotation: 45,
+                callback: (value) => {
+                  const dateObj = new Date(firstDate);
+                  dateObj.setDate(dateObj.getDate() + value);
+                  return dateObj.toISOString().split('T')[0];
+                }
+              },
+              title: { display: true, text: '日付', font: { size: 9 } }
+            },
+            y: {
+              min: 0,
+              max: 1,
+              ticks: { font: { size: 10 } },
+              title: { display: true, text: 'f(x) = x^2', font: { size: 9 } }
+            }
           }
         }
       });
@@ -5259,6 +5541,105 @@ function computePolygonMedian(fileKey, ring) {
     });
 
     document.addEventListener('mouseleave', hideMouseValueTooltip);
+
+    // CSV出力関数（簡易版）
+    window._polygonRing = null;
+    window._polygonLabel = null;
+
+    function prepareCSVExport(ring, label) {
+      window._polygonRing = ring;
+      window._polygonLabel = label;
+      showCSVPopup();
+    }
+
+    function showCSVPopup() {
+      const ring = window._polygonRing;
+      const label = window._polygonLabel;
+      
+      if (!ring || !label) {
+        alert('エラー');
+        return;
+      }
+
+      // 現在表示されているデータのみを使用（日付・指数フィルタ済み）
+      if (!S.currentData || !S.currentBbox || S.currentWidth === 0 || S.currentHeight === 0) {
+        alert('表示中のデータがありません。先に地図を表示してください。');
+        return;
+      }
+
+      const [west, south, east, north] = S.currentBbox;
+      const W = S.currentWidth;
+      const H = S.currentHeight;
+      const band = S.currentData;
+      const dLng = (east - west) / W;
+      const dLat = (north - south) / H;
+      
+      const lats = ring.map(p => p.lat !== undefined ? p.lat : p[0]);
+      const lngs = ring.map(p => p.lng !== undefined ? p.lng : p[1]);
+      const rMinLat = Math.min.apply(null, lats), rMaxLat = Math.max.apply(null, lats);
+      const rMinLng = Math.min.apply(null, lngs), rMaxLng = Math.max.apply(null, lngs);
+      
+      if (rMaxLat < south || rMinLat > north || rMaxLng < west || rMinLng > east) {
+        alert('ポリゴンが表示範囲外です');
+        return;
+      }
+      
+      const px0 = Math.max(0, Math.floor((rMinLng - west) / (east - west) * W));
+      const px1 = Math.min(W - 1, Math.ceil((rMaxLng - west) / (east - west) * W));
+      const py0 = Math.max(0, Math.floor((north - rMaxLat) / (north - south) * H));
+      const py1 = Math.min(H - 1, Math.ceil((north - rMinLat) / (north - south) * H));
+      
+      if (px0 > px1 || py0 > py1) {
+        alert('ポリゴン内にピクセルがありません');
+        return;
+      }
+      
+      // 現在表示されているレイヤーのラベルを取得
+      const currentLayer = S.overlayCache.find(c => c.visible);
+      let indexName = '不明'; // 植生指数名
+      if (currentLayer && currentLayer.label) {
+        // ラベルから植生指数名を抽出（最初の単語：NDVI, EVI, GNDVI, MSAVI, SAVI など）
+        const match = currentLayer.label.match(/^(NDVI|EVI|GNDVI|MSAVI|SAVI)/i);
+        if (match) {
+          indexName = match[1].toUpperCase();
+        }
+      }
+      
+      const rows = [];
+      for (let py = py0; py <= py1; py++) {
+        const lat = north - (py + 0.5) * dLat;
+        for (let px = px0; px <= px1; px++) {
+          const lng = west + (px + 0.5) * dLng;
+          if (pointInPolygon(lat, lng, ring)) {
+            const v = band[py * W + px];
+            if (isFinite(v) && !isNaN(v) && v !== 0) {
+              rows.push(lat.toFixed(6) + ',' + lng.toFixed(6) + ',' + v.toFixed(6) + ',' + indexName);
+            }
+          }
+        }
+      }
+      
+      if (rows.length === 0) {
+        alert('ポリゴン内にデータがありません');
+        return;
+      }
+      
+      const csvText = '\uFEFF' + '緯度,経度,値,植生指数\n' + rows.join('\n');
+      
+      const w = window.open();
+      w.document.open();
+      w.document.write('<html><head><meta charset="UTF-8"><title>CSV</title>');
+      w.document.write('<style>body{margin:20px;font-family:Arial}textarea{width:100%;height:500px}button{padding:8px 16px;margin:5px}</style></head><body>');
+      w.document.write('<h2>ポリゴン内ピクセル値</h2><p>対象: ' + label + '</p>');
+      w.document.write('<textarea id="csv" readonly></textarea>');
+      w.document.write('<div><button onclick="copy()">コピー</button><button onclick="dl()">ダウンロード</button><button onclick="window.close()">閉じる</button></div>');
+      w.document.write('<script>var txt="' + csvText.replace(/\n/g, '\\n').replace(/"/g, '\\"') + '";');
+      w.document.write('document.getElementById("csv").value=txt;');
+      w.document.write('function copy(){var t=document.getElementById("csv");t.select();document.execCommand("copy")}');
+      w.document.write('function dl(){var a=document.createElement("a");a.href="data:text/csv,"+encodeURIComponent(txt);a.download="data.csv";a.click()}');
+      w.document.write('<\/script></body></html>');
+      w.document.close();
+    }
   </script>
 
   <!-- マウス値ツールチップ -->
