@@ -531,7 +531,7 @@
       font-family: 'Space Mono', monospace;
       font-size: 0.75rem;
       pointer-events: none;
-      z-index: 2000;
+      z-index: 500;
       display: none;
       white-space: nowrap;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -807,6 +807,8 @@
       border-radius: 7px;
       padding: 10px;
       margin-bottom: 4px;
+      position: relative;
+      z-index: 10;
     }
 
     .fsp-table-wrap { overflow-x: auto; }
@@ -5165,7 +5167,16 @@ function computePolygonMedian(fileKey, ring) {
               labels: { font: { size: 10 }, boxWidth: 12 }
             },
             tooltip: {
-              enabled: false
+              enabled: true,
+              callbacks: {
+                title: (ctx) => {
+                  const daysOffset = ctx[0].parsed.x;
+                  const dateObj = new Date(firstDate);
+                  dateObj.setDate(dateObj.getDate() + daysOffset);
+                  return dateObj.toISOString().split('T')[0];
+                },
+                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(4) : '—')
+              }
             }
           },
           scales: {
@@ -5266,7 +5277,16 @@ function computePolygonMedian(fileKey, ring) {
               labels: { font: { size: 10 }, boxWidth: 12 }
             },
             tooltip: {
-              enabled: false
+              enabled: true,
+              callbacks: {
+                title: (ctx) => {
+                  const daysOffset = ctx[0].parsed.x;
+                  const dateObj = new Date(firstDate);
+                  dateObj.setDate(dateObj.getDate() + daysOffset);
+                  return dateObj.toISOString().split('T')[0];
+                },
+                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(6) : '—')
+              }
             }
           },
           scales: {
