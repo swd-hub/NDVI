@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>植生指数×農作業 因果関係分析</title>
+    <title>植生指数×農作業 時系列チャート</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * {
@@ -119,13 +119,6 @@
         .btn-secondary:hover {
             background: #ddd;
         }
-        .btn-danger {
-            background: #ff6b6b;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #ff5252;
-        }
         .data-preview {
             background: white;
             border: 1px solid #ddd;
@@ -155,45 +148,8 @@
         }
         .chart-container {
             position: relative;
-            height: 400px;
+            height: 500px;
             margin-bottom: 30px;
-        }
-        .analysis-section {
-            background: white;
-            border: 2px solid #667eea;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .analysis-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-        .stat-card {
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            border-radius: 6px;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 5px;
-        }
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
-        .work-event {
-            display: inline-block;
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            margin: 4px 4px 4px 0;
         }
         .legend {
             display: flex;
@@ -215,40 +171,6 @@
             height: 20px;
             border-radius: 3px;
         }
-        .correlation-matrix {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .correlation-matrix td {
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-            font-weight: 600;
-            font-size: 12px;
-        }
-        .correlation-matrix .label {
-            text-align: left;
-            background: #f5f5f5;
-            font-weight: 600;
-        }
-        .corr-value {
-            padding: 4px 8px;
-            border-radius: 3px;
-            color: white;
-        }
-        .corr-positive {
-            background: #d4edda;
-            color: #155724;
-        }
-        .corr-negative {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .corr-neutral {
-            background: #e2e3e5;
-            color: #383d41;
-        }
         .settings-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -265,7 +187,7 @@
             height: 18px;
             cursor: pointer;
         }
-        input[type="number"], input[type="text"], select {
+        input[type="text"] {
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -279,11 +201,6 @@
             margin-bottom: 15px;
             font-size: 13px;
             color: #0c5aa0;
-        }
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
         }
         .tabs {
             display: flex;
@@ -315,13 +232,12 @@
 </head>
 <body>
     <div class="container">
-        <h1>🌱 植生指数 × 農作業 因果関係分析ツール</h1>
-        <p class="subtitle">時系列データから施肥・除草などの作業効果を分析</p>
+        <h1>🌱 植生指数 × 農作業 可視化ツール</h1>
+        <p class="subtitle">時系列データと作業ログを重ね合わせて表示</p>
 
         <div class="tabs">
             <button class="tab active" onclick="switchTab(0)">📥 データ入力</button>
             <button class="tab" onclick="switchTab(1)">📊 時系列チャート</button>
-            <button class="tab" onclick="switchTab(2)">🔍 因果関係分析</button>
         </div>
 
         <div class="tab-content active">
@@ -329,7 +245,8 @@
                 <div class="section-title">植生指数データ（時系列）</div>
                 <div class="info-box">
                     📋 形式: 日付（YYYY-MM-DD）と指数をタブまたはカンマで区切ってください。<br>
-                    例: 2024-01-01	0.25	0.46	0.22	0.41	0.25 (日付, EVI, GNDVI, MSAVI, NDVI, SAVI)
+                    例: 2024-01-01	0.25	0.46	0.22	0.41	0.25 (日付, EVI, GNDVI, MSAVI, NDVI, SAVI)<br>
+                    ⚠️ <strong>重要</strong>: ヘッダー行で指定した列順序が、入力データの列順序と一致していることを確認してください。
                 </div>
                 <div class="input-group">
                     <div class="input-column">
@@ -350,17 +267,17 @@
             <div class="section">
                 <div class="section-title">農作業ログ（時系列）</div>
                 <div class="info-box">
-                    📋 形式: 日付（YYYY-MM-DD）と作業内容をタブで区切ってください。<br>
-                    作業種別: 施肥(fertilize), 除草(weeding), 農薬(pesticide), 灌漑(irrigation), その他(other)
+                    📋 形式: 年月日（YYYY-MM-DD）、項目、内容をタブまたはカンマで区切ってください。<br>
+                    例: 2025-04-17	肥料施用	高度化成４０３ 30kg/10a
                 </div>
                 <div class="input-group">
                     <div class="input-column">
                         <label>農作業ログ（テキスト貼り付け）:</label>
-                        <textarea id="workLogInput" placeholder="日付	作業種別	作業内容&#10;2024-01-10	fertilize	窒素肥料 100kg/ha&#10;2024-01-20	weeding	機械除草"></textarea>
+                        <textarea id="workLogInput" placeholder="年月日	項目	内容&#10;2025-04-03	肥料施用	牛糞堆肥 2000kg/10a&#10;2025-06-30	除草	アレイルSC 500ml/10a"></textarea>
                     </div>
                     <div class="input-column">
                         <label>ヘッダー行（先頭行）:</label>
-                        <input type="text" id="workHeaderInput" value="日付,作業種別,作業内容" placeholder="カンマ区切り">
+                        <input type="text" id="workHeaderInput" value="年月日,項目,内容" placeholder="カンマ区切り">
                         <button class="btn-primary" onclick="parseWorkData()">農作業ログを読み込む</button>
                         <div id="workDataPreview" class="data-preview">
                             <p style="color: #999;">データは読み込まれていません</p>
@@ -374,7 +291,6 @@
                 <div class="button-group">
                     <button class="btn-secondary" onclick="clearAllData()">すべてをクリア</button>
                     <button class="btn-secondary" onclick="exportData()">データをエクスポート (JSON)</button>
-                    <button class="btn-secondary" onclick="downloadSampleData()">サンプルデータをダウンロード</button>
                 </div>
                 <div id="dataStatus" style="margin-top: 15px; padding: 10px; background: white; border-radius: 6px; color: #666; font-size: 13px;"></div>
             </div>
@@ -389,16 +305,8 @@
                         <div id="indexCheckboxes" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;"></div>
                     </div>
                     <div>
-                        <label>表示する作業種別:</label>
+                        <label>表示する項目（作業種別）:</label>
                         <div id="workTypeCheckboxes" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;"></div>
-                    </div>
-                    <div>
-                        <label>時間遅延分析（日数）:</label>
-                        <input type="number" id="lagDays" value="7" min="0" max="30">
-                    </div>
-                    <div>
-                        <label>移動平均（日数）:</label>
-                        <input type="number" id="mavDays" value="7" min="1" max="30">
                     </div>
                 </div>
                 <button class="btn-primary" style="margin-top: 15px;" onclick="updateCharts()">チャートを更新</button>
@@ -412,50 +320,6 @@
                 <div class="legend" id="chartLegend"></div>
             </div>
         </div>
-
-        <div class="tab-content">
-            <div class="section">
-                <div class="section-title">因果関係分析</div>
-                
-                <div class="analysis-section">
-                    <h3 style="color: #333; margin-bottom: 15px;">📈 相関係数分析</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
-                        各植生指数と農作業イベント間の相関関係を計算します。
-                        移動平均を適用し、時間遅延を考慮した分析が可能です。
-                    </p>
-                    <div class="analysis-grid" id="correlationStats"></div>
-                </div>
-
-                <div class="analysis-section">
-                    <h3 style="color: #333; margin-bottom: 15px;">🔗 相関係数マトリクス</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
-                        植生指数と作業種別の相関（+1: 完全正相関、-1: 完全負相関、0: 無相関）
-                    </p>
-                    <div id="correlationMatrix" style="overflow-x: auto;"></div>
-                </div>
-
-                <div class="analysis-section">
-                    <h3 style="color: #333; margin-bottom: 15px;">⏱️ 時間遅延効果分析</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
-                        農作業から N日後の植生指数への影響度を分析（最大相関を探索）
-                    </p>
-                    <div id="lagAnalysisResults" style="margin-top: 15px;"></div>
-                </div>
-
-                <div class="analysis-section">
-                    <h3 style="color: #333; margin-bottom: 15px;">📊 作業別の効果検証</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
-                        各作業実施前後での平均値変化
-                    </p>
-                    <div id="workEffectAnalysis" style="margin-top: 15px;"></div>
-                </div>
-
-                <div class="export-buttons">
-                    <button class="btn-primary" onclick="generateReport()">分析レポートを生成</button>
-                    <button class="btn-secondary" onclick="exportAnalysisCSV()">分析結果を CSV でエクスポート</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -463,29 +327,6 @@
         let workLogData = [];
         let timeSeriesChart = null;
 
-        // 作業種別の日本語マッピング
-        const workTypeMap = {
-            'fertilize': '施肥',
-            'weeding': '除草',
-            'pesticide': '農薬',
-            'irrigation': '灌漑',
-            'other': 'その他',
-            '施肥': 'fertilize',
-            '除草': 'weeding',
-            '農薬': 'pesticide',
-            '灌漑': 'irrigation',
-            'その他': 'other'
-        };
-
-        function getWorkTypeJP(workType) {
-            return workTypeMap[workType] || workType;
-        }
-
-        function getWorkTypeEN(workTypeJP) {
-            return workTypeMap[workTypeJP] || workTypeJP;
-        }
-
-        // ===== データパース関数 =====
         function parseVegData() {
             const input = document.getElementById('vegIndexInput').value.trim();
             const headerInput = document.getElementById('vegHeaderInput').value.trim();
@@ -503,14 +344,14 @@
                 if (values.length < 2) return;
 
                 const dateStr = values[0];
-                if (!isValidDate(dateStr)) {
-                    console.warn(`Invalid date at line ${idx + 1}: ${dateStr}`);
-                    return;
-                }
+                if (!isValidDate(dateStr)) return;
 
                 const record = { date: new Date(dateStr) };
                 for (let i = 1; i < headers.length && i < values.length; i++) {
-                    record[headers[i]] = parseFloat(values[i]);
+                    const val = parseFloat(values[i]);
+                    if (!isNaN(val)) {
+                        record[headers[i]] = val;
+                    }
                 }
                 vegIndexData.push(record);
             });
@@ -523,13 +364,11 @@
 
         function parseWorkData() {
             const input = document.getElementById('workLogInput').value.trim();
-            const headerInput = document.getElementById('workHeaderInput').value.trim();
             if (!input) {
                 alert('データを入力してください');
                 return;
             }
 
-            const headers = headerInput.split(',').map(h => h.trim());
             const lines = input.split('\n').filter(l => l.trim());
             workLogData = [];
 
@@ -538,15 +377,15 @@
                 if (values.length < 2) return;
 
                 const dateStr = values[0];
-                if (!isValidDate(dateStr)) {
-                    console.warn(`Invalid date at line ${idx + 1}: ${dateStr}`);
-                    return;
-                }
+                if (!isValidDate(dateStr)) return;
+
+                const workType = values[1]; // 「項目」
+                const content = values[2] || ''; // 「内容」
 
                 const record = {
                     date: new Date(dateStr),
-                    workType: values[1] || 'other',
-                    content: values[2] || ''
+                    workType: workType,
+                    content: content
                 };
                 workLogData.push(record);
             });
@@ -574,13 +413,13 @@
             indices.forEach(idx => html += `<th>${idx}</th>`);
             html += '</tr></thead><tbody>';
 
-            vegIndexData.slice(0, 10).forEach(record => {
+            vegIndexData.forEach(record => {
                 html += `<tr><td>${record.date.toISOString().split('T')[0]}</td>`;
-                indices.forEach(idx => html += `<td>${(record[idx] || 0).toFixed(2)}</td>`);
+                indices.forEach(idx => html += `<td>${(record[idx] || 0).toFixed(4)}</td>`);
                 html += '</tr>';
             });
 
-            html += `</tbody></table><p style="margin-top: 10px; color: #999; font-size: 12px;">全 ${vegIndexData.length} 行</p>`;
+            html += `</tbody></table>`;
             preview.innerHTML = html;
         }
 
@@ -591,18 +430,18 @@
                 return;
             }
 
-            let html = '<table><thead><tr><th>日付</th><th>作業種別</th><th>作業内容</th></tr></thead><tbody>';
-            workLogData.slice(0, 10).forEach(record => {
+            let html = '<table><thead><tr><th>年月日</th><th>項目</th><th>内容</th></tr></thead><tbody>';
+            workLogData.forEach(record => {
                 html += `<tr><td>${record.date.toISOString().split('T')[0]}</td><td>${record.workType}</td><td>${record.content}</td></tr>`;
             });
-            html += `</tbody></table><p style="margin-top: 10px; color: #999; font-size: 12px;">全 ${workLogData.length} 行</p>`;
+            html += `</tbody></table>`;
             preview.innerHTML = html;
         }
 
         function updateIndexCheckboxes() {
             const container = document.getElementById('indexCheckboxes');
             if (!container) return;
-            container.innerHTML = ''; // ★要素の重複増殖を防ぐために初期化を追加
+            container.innerHTML = '';
 
             if (vegIndexData.length === 0) return;
             const indices = Object.keys(vegIndexData[0]).filter(k => k !== 'date');
@@ -618,7 +457,7 @@
         function updateWorkTypeCheckboxes() {
             const container = document.getElementById('workTypeCheckboxes');
             if (!container) return;
-            container.innerHTML = ''; // ★要素の重複増殖を防ぐために初期化を追加
+            container.innerHTML = '';
 
             if (workLogData.length === 0) return;
             const types = [...new Set(workLogData.map(w => w.workType))];
@@ -631,52 +470,43 @@
                 input.value = type;
                 input.checked = true;
                 label.appendChild(input);
-                const typeJP = getWorkTypeJP(type);
-                label.appendChild(document.createTextNode(` ${typeJP}`));
+                label.appendChild(document.createTextNode(` ${type}`));
                 container.appendChild(label);
             });
         }
 
         function updateDataStatus() {
             const status = document.getElementById('dataStatus');
-            status.innerHTML = `
-                ✅ 植生指数: ${vegIndexData.length} 日時点 | 
-                ✅ 農作業: ${workLogData.length} 件
-            `;
+            status.innerHTML = `✅ 植生指数: ${vegIndexData.length} 日時点 | ✅ 農作業: ${workLogData.length} 件`;
         }
 
-        // ===== チャート関数 =====
         function updateCharts() {
             if (vegIndexData.length === 0) {
                 alert('植生指数データを先に読み込んでください');
                 return;
             }
 
-            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked'))
-                .map(e => e.value);
-            const selectedWorkTypes = Array.from(document.querySelectorAll('#workTypeCheckboxes input:checked'))
-                .map(e => e.value);
+            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked')).map(e => e.value);
+            const selectedWorkTypes = Array.from(document.querySelectorAll('#workTypeCheckboxes input:checked')).map(e => e.value);
 
             if (selectedIndices.length === 0) {
                 alert('表示する植生指数を選択してください');
                 return;
             }
 
-            const mavDays = parseInt(document.getElementById('mavDays').value) || 1;
-            const mavData = calculateMovingAverage(vegIndexData, selectedIndices, mavDays);
+            const chartData = vegIndexData;
 
             const ctx = document.getElementById('timeSeriesChart').getContext('2d');
             if (timeSeriesChart) timeSeriesChart.destroy();
 
-            const dateLabels = mavData.map(d => d.date.toISOString().split('T')[0]);
-
+            const dateLabels = chartData.map(d => d.date.toISOString().split('T')[0]);
             const datasets = [];
             const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502'];
             
             selectedIndices.forEach((idx, colorIdx) => {
                 datasets.push({
-                    label: `${idx} (MA${mavDays}d)`,
-                    data: mavData.map(d => d[idx]),
+                    label: `${idx}`,
+                    data: chartData.map(d => d[idx]),
                     borderColor: colors[colorIdx % colors.length],
                     backgroundColor: colors[colorIdx % colors.length] + '30',
                     borderWidth: 2,
@@ -687,46 +517,83 @@
 
             const workEventPlugin = {
                 id: 'workEventPlugin',
-// 修正対象のブロック（396行目〜433行目付近）
                 afterDatasetsDraw(chart) {
                     const ctx = chart.ctx;
                     const xScale = chart.scales.x;
-                    const yScale = chart.scales.y;
                     const chartTop = chart.chartArea.top;
                     const chartBottom = chart.chartArea.bottom;
 
+                    const dateToPixelMap = {};
+                    dateLabels.forEach((label, idx) => {
+                        dateToPixelMap[label] = xScale.getPixelForValue(idx);
+                    });
+
+                    const worksByXPixel = {};
+                    
                     workLogData.forEach(work => {
                         if (!selectedWorkTypes.includes(work.workType)) return;
                         
                         const workDateStr = work.date.toISOString().split('T')[0];
-                        const xIndex = dateLabels.indexOf(workDateStr);
+                        let xPixel = dateToPixelMap[workDateStr];
                         
-                        if (xIndex === -1) return;
+                        if (xPixel === undefined) {
+                            const workDate = new Date(workDateStr);
+                            let minDiff = Infinity;
+                            let bestIndex = -1;
+                            
+                            dateLabels.forEach((label, idx) => {
+                                const labelDate = new Date(label);
+                                const diff = Math.abs(labelDate - workDate);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    bestIndex = idx;
+                                }
+                            });
+                            
+                            if (bestIndex === -1 || minDiff > 30 * 24 * 60 * 60 * 1000) return;
+                            xPixel = xScale.getPixelForValue(bestIndex);
+                        }
 
-                        const xPixel = xScale.getPixelForValue(xIndex);
-                        if (isNaN(xPixel)) return;
+                        if (xPixel === undefined || isNaN(xPixel)) return;
 
-                        ctx.strokeStyle = getWorkColorLine(work.workType);
-                        ctx.lineWidth = 1.5;
-                        ctx.setLineDash([5, 5]);
+                        let keyPixel = Object.keys(worksByXPixel).find(p => Math.abs(parseFloat(p) - xPixel) < 3);
+                        if (!keyPixel) {
+                            keyPixel = xPixel;
+                            worksByXPixel[keyPixel] = [];
+                        }
+                        worksByXPixel[keyPixel].push(work);
+                    });
+
+                    Object.entries(worksByXPixel).forEach(([xStr, works]) => {
+                        const xPixel = parseFloat(xStr);
+
+                        ctx.strokeStyle = '#555555';
+                        ctx.lineWidth = 1.0;
+                        ctx.setLineDash([4, 4]);
                         ctx.beginPath();
                         ctx.moveTo(xPixel, chartTop);
                         ctx.lineTo(xPixel, chartBottom);
                         ctx.stroke();
                         ctx.setLineDash([]);
 
-                        const workTypeJP = getWorkTypeJP(work.workType);
-                        ctx.fillStyle = getWorkColorLine(work.workType);
-                        // ★ここから修正：文字をチャート内に配置し、点線の左側に寄せる
-                        ctx.font = 'bold 12px sans-serif'; // フォントを少し小さく、太字に
-                        ctx.textAlign = 'right'; // テキストを右寄せ（点線の左側に表示）
-                        // 縦位置は chartTop + 15 (チャートの上端から下に15px) に変更
-                        // 横位置は xPixel - 5 (点線から左に5px) に変更
-                        ctx.fillText(workTypeJP, xPixel - 5, chartTop + 15);
-                        // ★修正ここまで
+                        works.forEach((work, idx) => {
+                            ctx.fillStyle = getWorkColorLine(work.workType);
+                            ctx.font = 'bold 10px sans-serif';
+                            
+                            const yOffset = chartTop + 15 + (idx * 14); 
+                            if (yOffset > chartBottom - 20) return;
+
+                            if (idx % 2 === 0) {
+                                ctx.textAlign = 'right';
+                                ctx.fillText(work.workType, xPixel - 4, yOffset);
+                            } else {
+                                ctx.textAlign = 'left';
+                                ctx.fillText(work.workType, xPixel + 4, yOffset);
+                            }
+                        });
                     });
                 }
-                            };
+            };
 
             timeSeriesChart = new Chart(ctx, {
                 type: 'line',
@@ -738,12 +605,8 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: { type: 'category' }
-                    }
+                    plugins: { legend: { display: false } },
+                    scales: { x: { type: 'category' } }
                 },
                 plugins: [workEventPlugin]
             });
@@ -751,45 +614,20 @@
             updateLegend();
         }
 
-        function calculateMovingAverage(data, indices, days) {
-            return data.map((point, idx) => {
-                const start = Math.max(0, idx - days + 1);
-                const window = data.slice(start, idx + 1);
-                const result = { date: point.date };
-                indices.forEach(indexName => {
-                    result[indexName] = window.reduce((sum, p) => sum + (p[indexName] || 0), 0) / window.length;
-                });
-                return result;
-            });
-        }
-
         function getWorkColorLine(workType) {
-            const colors = {
-                fertilize: '#155724',
-                weeding: '#004085',
-                pesticide: '#cc5200',
-                irrigation: '#0066cc',
-                other: '#666'
-            };
-            return colors[workType] || '#999';
-        }
-
-        function getWorkColorBg(workType) {
-            const colors = {
-                fertilize: '#d4edda',
-                weeding: '#cce5ff',
-                pesticide: '#ffe5cc',
-                irrigation: '#cce5ff',
-                other: '#e2e3e5'
-            };
-            return colors[workType] || '#ddd';
+            const colors = ['#155724', '#004085', '#cc5200', '#0066cc', '#8B0000', '#FF6B35', '#004E89', '#9D4EDD', '#3A86FF', '#FB5607'];
+            let hash = 0;
+            for (let i = 0; i < workType.length; i++) {
+                hash = ((hash << 5) - hash) + workType.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return colors[Math.abs(hash) % colors.length];
         }
 
         function updateLegend() {
             let html = '';
             const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502'];
-            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked'))
-                .map(e => e.value);
+            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked')).map(e => e.value);
 
             selectedIndices.forEach((idx, colorIdx) => {
                 html += `<div class="legend-item">
@@ -797,262 +635,18 @@
                     <span>${idx}</span>
                 </div>`;
             });
-
             document.getElementById('chartLegend').innerHTML = html;
         }
 
-        // ===== 因果関係分析 =====
-        function calculateCorrelation(series1, series2) {
-            if (series1.length !== series2.length || series1.length === 0) return 0;
-            const mean1 = series1.reduce((a, b) => a + b) / series1.length;
-            const mean2 = series2.reduce((a, b) => a + b) / series2.length;
-            const numerator = series1.reduce((sum, v1, i) => sum + (v1 - mean1) * (series2[i] - mean2), 0);
-            const denom1 = Math.sqrt(series1.reduce((sum, v) => sum + (v - mean1) ** 2, 0));
-            const denom2 = Math.sqrt(series2.reduce((sum, v) => sum + (v - mean2) ** 2, 0));
-            return (denom1 * denom2) === 0 ? 0 : numerator / (denom1 * denom2);
-        }
-
-        function analyzeCorrelation() {
-            if (vegIndexData.length === 0 || workLogData.length === 0) {
-                alert('両方のデータが必要です');
-                return;
-            }
-
-            const indices = Object.keys(vegIndexData[0]).filter(k => k !== 'date');
-            const lagDays = parseInt(document.getElementById('lagDays').value) || 0;
-
-            const workTypes = [...new Set(workLogData.map(w => w.workType))];
-            const correlations = {};
-
-            workTypes.forEach(workType => {
-                const workSeries = vegIndexData.map(vd => {
-                    const matchCount = workLogData.filter(w =>
-                        w.workType === workType &&
-                        w.date >= new Date(vd.date.getTime() - lagDays * 86400000) &&
-                        w.date <= vd.date
-                    ).length;
-                    return matchCount > 0 ? 1 : 0;
-                });
-
-                const indexCorrs = {};
-                indices.forEach(idx => {
-                    const indexSeries = vegIndexData.map(v => v[idx] || 0);
-                    indexCorrs[idx] = calculateCorrelation(workSeries, indexSeries);
-                });
-                correlations[workType] = indexCorrs;
-            });
-
-            displayCorrelationStats(correlations);
-            displayCorrelationMatrix(correlations, indices);
-            analyzeLagEffect(indices);
-            analyzeWorkEffect();
-        }
-
-        function displayCorrelationStats(correlations) {
-            const container = document.getElementById('correlationStats');
-            container.innerHTML = '';
-            Object.entries(correlations).forEach(([workType, indexCorrs]) => {
-                const avgCorr = Object.values(indexCorrs).reduce((a, b) => a + b) / Object.keys(indexCorrs).length;
-                const card = document.createElement('div');
-                card.className = 'stat-card';
-                const workTypeJP = getWorkTypeJP(workType);
-                card.innerHTML = `
-                    <div class="stat-label">${workTypeJP}</div>
-                    <div class="stat-value">${avgCorr.toFixed(3)}</div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        function displayCorrelationMatrix(correlations, indices) {
-            const container = document.getElementById('correlationMatrix');
-            let html = '<table class="correlation-matrix"><tr><td class="label"></td>';
-            indices.forEach(idx => html += `<td>${idx}</td>`);
-            html += '</tr>';
-
-            Object.entries(correlations).forEach(([workType, indexCorrs]) => {
-                const workTypeJP = getWorkTypeJP(workType);
-                html += `<tr><td class="label">${workTypeJP}</td>`;
-                indices.forEach(idx => {
-                    const corr = indexCorrs[idx];
-                    const classes = corr > 0.3 ? 'corr-positive' : corr < -0.3 ? 'corr-negative' : 'corr-neutral';
-                    html += `<td><span class="corr-value ${classes}">${corr.toFixed(3)}</span></td>`;
-                });
-                html += '</tr>';
-            });
-            html += '</table>';
-            container.innerHTML = html;
-        }
-
-        function analyzeLagEffect(indices) {
-            const container = document.getElementById('lagAnalysisResults');
-            const maxLag = parseInt(document.getElementById('lagDays').value) || 7;
-            const workTypes = [...new Set(workLogData.map(w => w.workType))];
-
-            let html = '<table class="correlation-matrix"><tr><td class="label">作業種別</td>';
-            for (let lag = 0; lag <= maxLag; lag += 3) {
-                html += `<td>+${lag}日</td>`;
-            }
-            html += '<td>最大相関</td></tr>';
-
-            workTypes.forEach(workType => {
-                const workTypeJP = getWorkTypeJP(workType);
-                html += `<tr><td class="label">${workTypeJP}</td>`;
-                let maxCorr = -2;
-                let maxLagDays = 0;
-
-                for (let lag = 0; lag <= maxLag; lag += 3) {
-                    const workSeries = vegIndexData.map(vd => {
-                        const matchCount = workLogData.filter(w =>
-                            w.workType === workType &&
-                            w.date >= new Date(vd.date.getTime() - lag * 86400000) &&
-                            w.date <= new Date(vd.date.getTime())
-                        ).length;
-                        return matchCount > 0 ? 1 : 0;
-                    });
-
-                    const testIndex = Object.keys(vegIndexData[0]).find(k => k !== 'date');
-                    if (!testIndex) return;
-                    
-                    const indexSeries = vegIndexData.map(v => v[testIndex] || 0);
-                    const corr = calculateCorrelation(workSeries, indexSeries);
-                    
-                    if (corr > maxCorr) {
-                        maxCorr = corr;
-                        maxLagDays = lag;
-                    }
-
-                    const classes = corr > 0.3 ? 'corr-positive' : corr < -0.3 ? 'corr-negative' : 'corr-neutral';
-                    html += `<td><span class="corr-value ${classes}">${corr.toFixed(3)}</span></td>`;
-                }
-
-                html += `<td><strong>+${maxLagDays}日 (${maxCorr.toFixed(3)})</strong></td></tr>`;
-            });
-            html += '</table>';
-            container.innerHTML = html;
-        }
-
-        function analyzeWorkEffect() {
-            const container = document.getElementById('workEffectAnalysis');
-            const beforeDays = 7;
-            const afterDays = 14;
-
-            let html = '';
-            const workTypes = [...new Set(workLogData.map(w => w.workType))];
-            const testIndex = Object.keys(vegIndexData[0]).find(k => k !== 'date');
-
-            workTypes.forEach(workType => {
-                const works = workLogData.filter(w => w.workType === workType);
-                if (works.length === 0) return;
-
-                let beforeValues = [];
-                let afterValues = [];
-
-                works.forEach(work => {
-                    vegIndexData.forEach((vd, idx) => {
-                        const daysDiff = (vd.date - work.date) / 86400000;
-                        if (daysDiff >= -beforeDays && daysDiff < 0) {
-                            beforeValues.push(vd[testIndex] || 0);
-                        }
-                        if (daysDiff > 0 && daysDiff <= afterDays) {
-                            afterValues.push(vd[testIndex] || 0);
-                        }
-                    });
-                });
-
-                if (beforeValues.length > 0 && afterValues.length > 0) {
-                    const beforeAvg = beforeValues.reduce((a, b) => a + b) / beforeValues.length;
-                    const afterAvg = afterValues.reduce((a, b) => a + b) / afterValues.length;
-                    const improvement = ((afterAvg - beforeAvg) / beforeAvg * 100).toFixed(1);
-                    const workTypeJP = getWorkTypeJP(workType);
-
-                    html += `<div style="padding: 10px; margin: 10px 0; background: white; border-radius: 6px; border-left: 4px solid ${getWorkColorLine(workType)};">
-                        <strong>${workTypeJP}</strong> (${works.length}件)<br>
-                        実施前平均: ${beforeAvg.toFixed(2)} → 実施後平均: ${afterAvg.toFixed(2)}<br>
-                        変化率: <span style="font-weight: bold; color: ${improvement > 0 ? 'green' : 'red'};">${improvement > 0 ? '+' : ''}${improvement}%</span>
-                    </div>`;
-                }
-            });
-
-            container.innerHTML = html || '<p style="color: #999;">データが不足しています</p>';
-        }
-
-        // ===== レポート生成 =====
-        function generateReport() {
-            analyzeCorrelation();
-            alert('分析レポートを生成しました。下のセクションで結果を確認できます。');
-        }
-
-        // ===== エクスポート =====
         function exportData() {
-            const data = {
-                vegIndexData,
-                workLogData,
-                exportDate: new Date().toISOString()
-            };
-            downloadJSON(data, 'veg_work_data.json');
-        }
-
-        function exportAnalysisCSV() {
-            analyzeCorrelation();
-            const indices = Object.keys(vegIndexData[0]).filter(k => k !== 'date');
-            const workTypes = [...new Set(workLogData.map(w => w.workType))];
-            let csv = '作業種別,';
-            csv += indices.join(',') + '\n';
-
-            workTypes.forEach(workType => {
-                const workSeries = vegIndexData.map(vd => {
-                    const matchCount = workLogData.filter(w =>
-                        w.workType === workType && w.date <= vd.date
-                    ).length;
-                    return matchCount > 0 ? 1 : 0;
-                });
-
-                const workTypeJP = getWorkTypeJP(workType);
-                csv += workTypeJP + ',';
-                csv += indices.map(idx => {
-                    const indexSeries = vegIndexData.map(v => v[idx] || 0);
-                    return calculateCorrelation(workSeries, indexSeries).toFixed(3);
-                }).join(',') + '\n';
-            });
-
-            downloadCSV(csv, 'causal_analysis.csv');
-        }
-
-        function downloadJSON(data, filename) {
+            const data = { vegIndexData, workLogData, exportDate: new Date().toISOString() };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = filename;
+            a.download = 'veg_work_data.json';
             a.click();
         }
 
-        function downloadCSV(csv, filename) {
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = filename;
-            a.click();
-        }
-
-        function downloadSampleData() {
-            const sample = `日付\tEVI\tGNDVI\tMSAVI\tNDVI\tSAVI
-2024-01-01\t0.25\t0.46\t0.22\t0.41\t0.25
-2024-01-08\t0.28\t0.49\t0.25\t0.44\t0.28
-2024-01-15\t0.32\t0.52\t0.29\t0.48\t0.32
-2024-01-22\t0.35\t0.55\t0.32\t0.51\t0.35
-2024-01-29\t0.38\t0.58\t0.35\t0.54\t0.38
-2024-02-05\t0.36\t0.56\t0.33\t0.52\t0.36
-2024-02-12\t0.33\t0.53\t0.30\t0.49\t0.33
-
-\n\n---\n\n日付\t作業種別\t作業内容
-2024-01-10\tfertilize\t窒素肥料 100kg/ha
-2024-01-20\tweeding\t機械除草
-2024-02-01\tpesticide\tボルドー液 800倍`;
-            downloadCSV(sample, 'sample_data.txt');
-        }
-
-        // ===== ユーティリティ =====
         function clearAllData() {
             if (!confirm('すべてのデータを削除しますか？')) return;
             vegIndexData = [];
@@ -1062,7 +656,6 @@
             document.getElementById('vegDataPreview').innerHTML = '<p style="color: #999;">データは読み込まれていません</p>';
             document.getElementById('workDataPreview').innerHTML = '<p style="color: #999;">データは読み込まれていません</p>';
             document.getElementById('dataStatus').innerHTML = '';
-            
             document.getElementById('indexCheckboxes').innerHTML = '';
             document.getElementById('workTypeCheckboxes').innerHTML = '';
         }
@@ -1077,35 +670,107 @@
             }
         }
 
-        // 初期化
         window.addEventListener('load', () => {
             const sampleVegData = `日付	EVI	GNDVI	MSAVI	NDVI	SAVI
-2026-03-28	0.2590	0.4619	0.2263	0.4116	0.2533
-2026-04-07	0.1419	0.3437	0.1242	0.2652	0.1463
-2026-04-12	0.1538	0.3329	0.1183	0.2400	0.1394
-2026-04-25	0.1576	0.3541	0.1352	0.2808	0.1583`;
+2025-03-20	0.1250	0.3150	0.0963	0.2450	0.1143
+2025-03-30	0.1480	0.3580	0.1263	0.2950	0.1463
+2025-04-09	0.1720	0.3980	0.1563	0.3450	0.1783
+2025-04-19	0.2050	0.4450	0.1863	0.3950	0.2150
+2025-04-29	0.2480	0.5050	0.2263	0.4550	0.2683
+2025-05-09	0.2950	0.5550	0.2663	0.5050	0.3250
+2025-05-19	0.3380	0.5950	0.3063	0.5450	0.3783
+2025-05-29	0.3750	0.6250	0.3363	0.5750	0.4150
+2025-06-08	0.4050	0.6450	0.3663	0.5950	0.4483
+2025-06-18	0.4280	0.6600	0.3863	0.6100	0.4750
+2025-06-28	0.4450	0.6700	0.4063	0.6200	0.4950
+2025-07-08	0.4580	0.6750	0.4163	0.6250	0.5083
+2025-07-18	0.4620	0.6700	0.4163	0.6200	0.5150
+2025-07-28	0.4550	0.6550	0.4063	0.6050	0.5050
+2025-08-07	0.4350	0.6250	0.3863	0.5750	0.4850
+2025-08-17	0.3950	0.5750	0.3463	0.5250	0.4350
+2025-08-27	0.3250	0.4950	0.2863	0.4550	0.3650
+2025-09-06	0.2350	0.3950	0.2063	0.3650	0.2550`;
 
-            const sampleWorkData = `日付	作業種別	作業内容
-2026-03-15	other	苗床準備・育苗開始
-2026-03-20	other	播種（育苗箱2000枚）
-2026-03-28	fertilize	育苗期追肥（葉面散布）
-2026-04-05	fertilize	基肥施用 N:P:K=10:10:10, 100kg/ha
-2026-04-12	irrigation	用水路開水・田面準備
-2026-04-15	pesticide	育苗期病害防除（ベンレート）
-2026-04-18	other	田植え前圃場確認
-2026-04-20	irrigation	田植え前湛水・代かき
-2026-04-22	pesticide	田植え時農薬処理（フィプロニル）
-2026-04-25	weeding	機械除草（1回目、植後5日）
-2026-04-28	weeding	初期除草追加処理（手取り）
-2026-05-02	pesticide	帯状除草剤散布（2,4-D系）
-2026-05-08	fertilize	分げつ期追肥（尿素N 30kg/ha）
-2026-05-10	irrigation	溝切り・排水性改善
-2026-05-12	pesticide	トビイロウンカ予防散布
-2026-05-15	weeding	中期除草（2回目、機械）
-2026-05-18	weeding	手作業除草（ノビエ集中処理）
-2026-05-22	fertilize	穂肥準備・追肥計画実施（N 15kg/ha）
-2026-05-25	pesticide	紋枯病予防 フジワン乳剤1000倍液
-2026-05-28	pesticide	いもち病予防 ベンレート水和剤`;
+            const sampleWorkData = `年月日	項目	内容
+2025-03-16	その他	つきはやか 播種（面積194.5a）
+2025-03-23	その他	ヒメノモチ 播種（面積349.76a）
+2025-03-24	その他	つきはやか 播種（面積385.1a）
+2025-04-03	肥料施用	牛糞堆肥 2000kg/10a
+2025-04-05	肥料施用	ミネラルG 200kg/10a
+2025-04-17	開墾_その他	ヒメノモチ 田植（面積378.55a）
+2025-04-17	肥料施用	高度化成４０３ 30kg/10a
+2025-04-17	農薬散布	パダン粒剤４ 75g/10a
+2025-04-17	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-04-19	その他	つきはやか 田植
+2025-04-19	肥料施用	オリザ４６３ 27kg/10a
+2025-04-24	その他	つきはやか 田植
+2025-04-24	肥料施用	硫安入NP化成 30kg/10a
+2025-04-27	その他	ヒメノモチ 田植
+2025-04-27	肥料施用	高度化成４０３ 30kg/10a
+2025-04-27	農薬散布	パダン粒剤４ 100g/10a
+2025-04-27	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-04-27	農薬散布	ジェイフレンド４００FC 400g/10a
+2025-04-29	農薬散布	ジェイフレンド４００FC 400g/10a
+2025-05-07	肥料施用	乾田直播用一発25-5-5-3 38kg/10a
+2025-05-08	その他	つきはやか 播種
+2025-05-08	肥料施用	塩安 20kg/10a
+2025-05-16	農薬散布	モゲトン 3kg/10a
+2025-05-18	その他	きぬむすめ 播種（面積344.63a）
+2025-05-25	農薬散布	クリンチャーEW 1kg/10a
+2025-05-29	肥料施用	高度化成４０３ 30kg/10a
+2025-05-29	農薬散布	パダン粒剤４ 50g/10a
+2025-05-29	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-05-29	その他	きぬむすめ 田植
+2025-06-02	その他	たちすずか 播種（面積215.56a）
+2025-06-05	肥料施用	鶏ふん 300kg/10a
+2025-06-06	肥料施用	硫安入NP化成 20kg/10a
+2025-06-08	その他	たちすずか 播種（面積768.17a）
+2025-06-09	肥料施用	牛糞堆肥 2000kg/10a
+2025-06-09	農薬散布	ジェイフレンド４００FC 400g/10a
+2025-06-10	その他	たちすずか 播種
+2025-06-10	肥料施用	鶏ふん 250kg/10a
+2025-06-12	その他	きぬむすめ 播種（面積1407.97a）
+2025-06-13	農薬散布	タッチダウン 500ml/10a
+2025-06-13	その他	たちすずか 田植
+2025-06-13	肥料施用	高度化成４０３ 40kg/10a
+2025-06-13	農薬散布	パダン粒剤４ 70g/10a
+2025-06-13	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-06-13	その他	きぬむすめ 田植
+2025-06-13	肥料施用	高度化成４０３ 30kg/10a
+2025-06-13	農薬散布	パダン粒剤４ 100g/10a
+2025-06-13	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-06-13	農薬散布	タッチダウン 300ml/10a
+2025-06-13	その他	きぬむすめ 田植（面積384.09a）
+2025-06-13	肥料施用	高度化成４０３ 30kg/10a
+2025-06-13	農薬散布	パダン粒剤４ 60g/10a
+2025-06-13	農薬散布	ゼータプラス１キロ粒剤 1kg/10a
+2025-06-17	農薬散布	カウンツルエナジー 1kg/10a
+2025-06-18	農薬散布	スタム 1kg/10a
+2025-06-18	農薬散布	マーシェット 500ml/10a
+2025-06-19	農薬散布	ノミニー液剤 150ml/10a
+2025-06-21	その他	たちすずか 田植
+2025-06-21	肥料施用	硫安入NP化成 30kg/10a
+2025-06-26	農薬散布	稲大将箱粒剤 50g/10a
+2025-06-30	除草	アレイルSC 500ml/10a
+2025-07-01	除草	バサグラン液剤 100ml/10a
+2025-07-01	その他	たちすずか 田植（面積385.32a）
+2025-07-01	肥料施用	ツバメコートSLH２０ 40kg/10a
+2025-07-01	農薬散布	スタウトダントツ 50g/10a
+2025-07-01	農薬散布	ラオウ1キロ粒剤 1kg/10a
+2025-07-01	その他	たちすずか 播種（面積1689.29a）
+2025-07-10	農薬散布	ジャンダルム 250ml/10a
+2025-07-15	農薬散布	ボディガードプロジャンボ 300g/10a
+2025-07-16	農薬散布	ボディガードプロジャンボ 300g/10a
+2025-07-22	農薬散布	スタークル液剤１０ 8倍希釈/10a
+2025-07-23	農薬散布	トドメバスMF液剤 200ml/10a
+2025-07-23	農薬散布	ロイヤント乳剤 100ml/10a
+2025-07-30	農薬散布	アレイルSC 500ml/10a
+2025-08-01	肥料施用	NP化成４４４ 10kg/10a
+2025-08-03	肥料施用	硫安 20kg/10a
+2025-08-06	肥料施用	硫安入NP化成 20kg/10a
+2025-08-09	肥料施用	硫安入NP化成 20kg/10a
+2025-08-18	農薬散布	トドメバスMF液剤 1000ml/10a
+2025-08-18	農薬散布	ロイヤント乳剤 200ml/10a`;
 
             document.getElementById('vegIndexInput').value = sampleVegData;
             document.getElementById('workLogInput').value = sampleWorkData;
@@ -1113,9 +778,7 @@
             parseVegData();
             parseWorkData();
 
-            setTimeout(() => {
-                updateCharts();
-            }, 200);
+            setTimeout(() => { updateCharts(); }, 200);
         });
     </script>
 </body>
