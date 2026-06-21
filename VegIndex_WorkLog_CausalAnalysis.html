@@ -509,9 +509,9 @@
                     data: chartData.map(d => d[idx]),
                     borderColor: colors[colorIdx % colors.length],
                     backgroundColor: colors[colorIdx % colors.length] + '30',
-                    borderWidth: 3,　//線の太さ調整
-                    pointRadius: 5,      // ← ★これらを追加！（例: 5 で大きめのドットになります）
-        			pointHoverRadius: 7, // ← ★マウスを乗せたときのドットの大きさ
+                    borderWidth: 3,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
                     tension: 0.1,
                     fill: false
                 });
@@ -525,75 +525,163 @@
                     const chartTop = chart.chartArea.top;
                     const chartBottom = chart.chartArea.bottom;
 
+                    // ラベル（日付）文字列とインデックス配列
+                    const dateLabels = chart.data.labels.map(l => l);
+                    // 日付文字列 -> Date オブジェクト配列
+                    const labelDates = dateLabels.map(s => new Date(s));
+
+                    // dateLabels からピクセル取得用の map（直接一致用）
                     const dateToPixelMap = {};
                     dateLabels.forEach((label, idx) => {
                         dateToPixelMap[label] = xScale.getPixelForValue(idx);
                     });
 
+                    // 同じ x ピクセル（近接）にある作業をまとめる
                     const worksByXPixel = {};
-                    
+
                     workLogData.forEach(work => {
+                        if (!Array.isArray(selectedWorkTypes) || selectedWorkTypes.length === 0) return;
                         if (!selectedWorkTypes.includes(work.workType)) return;
-                        
-                        const workDateStr = work.date.toISOString().split('T')[0];
+
+                        const workDate = new Date(work.date.toISOString().split('T')[0]); // 日付だけ
+                        const workDateStr = workDate.toISOString().split('T')[0];
+
+                        // まずラベルと完全一致する位置を探す
                         let xPixel = dateToPixelMap[workDateStr];
-                        
+
+                        // 一致しない場合：前後のラベルを見つけて補間する
                         if (xPixel === undefined) {
-                            const workDate = new Date(workDateStr);
-                            let minDiff = Infinity;
-                            let bestIndex = -1;
-                            
-                            dateLabels.forEach((label, idx) => {
-                                const labelDate = new Date(label);
-                                const diff = Math.abs(labelDate - workDate);
-                                if (diff < minDiff) {
-                                    minDiff = diff;
-                                    bestIndex = idx;
+                            // find insertion index: labelDates[i] <= workDate <= labelDates[i+1]
+                            let beforeIdx = -1;
+                            for (let i = 0; i < labelDates.length - 1; i++) {
+                                if (labelDates[i] <= workDate && workDate <= labelDates[i + 1]) {
+                                    beforeIdx = i;
+                                    break;
                                 }
-                            });
-                            
-                            if (bestIndex === -1 || minDiff > 30 * 24 * 60 * 60 * 1000) return;
-                            xPixel = xScale.getPixelForValue(bestIndex);
+                            }
+
+                            if (beforeIdx >= 0) {
+                                const t0 = labelDates[beforeIdx].getTime();
+                                const t1 = labelDates[beforeIdx + 1].getTime();
+                                const tw = workDate.getTime();
+                                const frac = (t1 - t0) > 0 ? (tw - t0) / (t1 - t0) : 0;
+                                // Chart.js の category scale に対して、index + frac を与えると補間してくれる
+                                xPixel = xScale.getPixelForValue(beforeIdx + frac);
+                            } else {
+                                // 範囲外（最も近いラベルにスナップする）
+                                let minDiff = Infinity;
+                                let bestIndex = -1;
+                                for (let i = 0; i < labelDates.length; i++) {
+                                    const diff = Math.abs(labelDates[i] - workDate);
+                                    if (diff < minDiff) { minDiff = diff; bestIndex = i; }
+                                }
+                                // 許容閾値(ここでは 30 日)を越える場合は描画しない
+                                const THRESH_MS = 30 * 24 * 60 * 60 * 1000;
+                                if (bestIndex === -1 || minDiff > THRESH_MS) return;
+                                xPixel = xScale.getPixelForValue(bestIndex);
+                            }
                         }
 
                         if (xPixel === undefined || isNaN(xPixel)) return;
 
-                        let keyPixel = Object.keys(worksByXPixel).find(p => Math.abs(parseFloat(p) - xPixel) < 3);
-                        if (!keyPixel) {
-                            keyPixel = xPixel;
-                            worksByXPixel[keyPixel] = [];
-                        }
-                        worksByXPixel[keyPixel].push(work);
+                        // 近いピクセルは同じグループにまとめる（差 < 3px）
+                        const key = Object.keys(worksByXPixel).find(p => Math.abs(parseFloat(p) - xPixel) < 3);
+                        const useKey = key || xPixel;
+                        if (!worksByXPixel[useKey]) worksByXPixel[useKey] = [];
+                        worksByXPixel[useKey].push(work);
                     });
 
+                    // 描画：破線（少し太く）＋ 作業ラベル（背景付き、左右交互で配置、間隔を広げる）
                     Object.entries(worksByXPixel).forEach(([xStr, works]) => {
                         const xPixel = parseFloat(xStr);
 
+                        // 破線
+                        ctx.save();
                         ctx.strokeStyle = '#555555';
-                        ctx.lineWidth = 1.0;
-                        ctx.setLineDash([4, 4]);
+                        ctx.lineWidth = 2.5;                 // ← ここで太さを上げる
+                        ctx.setLineDash([6, 4]);            // 破線パターン少し長め
                         ctx.beginPath();
                         ctx.moveTo(xPixel, chartTop);
                         ctx.lineTo(xPixel, chartBottom);
                         ctx.stroke();
                         ctx.setLineDash([]);
+                        ctx.restore();
 
-                        works.forEach((work, idx) => {
+                        // ラベル描画準備
+                        const fontSize = 12;
+                        ctx.font = `bold ${fontSize}px sans-serif`;
+                        ctx.textBaseline = 'top';
+
+                        const gap = 6;                      // ラベル間のスペース
+                        const maxLines = Math.floor((chartBottom - chartTop - 20) / (fontSize + gap)); // 余白に入る最大行数
+                        const drawCount = Math.min(works.length, Math.max(1, maxLines));
+                        const showMore = works.length > drawCount;
+
+                        // 表示順は時間順に（安定）
+                        works.sort((a, b) => a.date - b.date);
+
+                        // ラベルを上側に詰めて描く（左右交互）
+                        for (let i = 0; i < drawCount; i++) {
+                            const work = works[i];
+                            const text = work.workType;
+                            const textWidth = ctx.measureText(text).width;
+                            const boxPadding = 4;
+                            // 左右交互
+                            const alignRight = (i % 2 === 0);
+                            ctx.textAlign = alignRight ? 'right' : 'left';
+
+                            // Y位置： chartTop + offset + i*(font+gap)
+                            const yOffset = chartTop + 6 + i * (fontSize + gap);
+
+                            // 背景矩形（白、少し透明）で読みやすくする
+                            const boxX = alignRight ? (xPixel - 6 - textWidth - boxPadding * 2) : (xPixel + 6);
+                            const boxY = yOffset;
+                            const boxW = textWidth + boxPadding * 2;
+                            const boxH = fontSize + boxPadding;
+
+                            ctx.save();
+                            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                            ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+                            roundRect(ctx, boxX - 2, boxY - 2, boxW + 4, boxH + 4, 4, true, false);
                             ctx.fillStyle = getWorkColorLine(work.workType);
-                            ctx.font = 'bold 14px sans-serif';　//フォントの大きさ
-                            
-                            const yOffset = chartTop + 15 + (idx * 16); //文字のオフセット調整
-                            if (yOffset > chartBottom - 20) return;
+                            ctx.fillText(text, alignRight ? (xPixel - 8) : (xPixel + 8), boxY + (boxPadding / 2));
+                            ctx.restore();
+                        }
 
-                            if (idx % 2 === 0) {
-                                ctx.textAlign = 'right';
-                                ctx.fillText(work.workType, xPixel - 4, yOffset);
-                            } else {
-                                ctx.textAlign = 'left';
-                                ctx.fillText(work.workType, xPixel + 4, yOffset);
-                            }
-                        });
+                        // 省略表示（+N）がある場合は最後の行に表示
+                        if (showMore) {
+                            const moreText = `+${works.length - drawCount} 件`;
+                            ctx.save();
+                            ctx.font = `bold ${fontSize}px sans-serif`;
+                            ctx.textAlign = 'left';
+                            const yOffset = chartTop + 6 + drawCount * (fontSize + gap);
+                            const textWidth = ctx.measureText(moreText).width;
+                            const boxPadding = 4;
+                            const boxX = xPixel + 6;
+                            const boxY = yOffset;
+                            const boxW = textWidth + boxPadding * 2;
+                            const boxH = fontSize + boxPadding;
+                            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                            roundRect(ctx, boxX - 2, boxY - 2, boxW + 4, boxH + 4, 4, true, false);
+                            ctx.fillStyle = '#333';
+                            ctx.fillText(moreText, boxX + boxPadding, boxY + (boxPadding / 2));
+                            ctx.restore();
+                        }
                     });
+
+                    // 小さい角丸矩形描画ユーティリティ
+                    function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+                        if (typeof r === 'undefined') r = 5;
+                        ctx.beginPath();
+                        ctx.moveTo(x + r, y);
+                        ctx.arcTo(x + w, y, x + w, y + h, r);
+                        ctx.arcTo(x + w, y + h, x, y + h, r);
+                        ctx.arcTo(x, y + h, x, y, r);
+                        ctx.arcTo(x, y, x + w, y, r);
+                        ctx.closePath();
+                        if (fill) ctx.fill();
+                        if (stroke) ctx.stroke();
+                    }
                 }
             };
 
@@ -603,31 +691,31 @@
                     labels: dateLabels,
                     datasets: datasets
                 },
-				options: {
-				    responsive: true,
-				    maintainAspectRatio: false,
-				    interaction: { mode: 'index', intersect: false },
-				    plugins: { legend: { display: false } },
-				    scales: { 
-				        // ── 横軸（日付）の文字サイズ指定 ──
-				        x: { 
-				            type: 'category',
-				            ticks: {
-				                font: {
-				                    size: 14 // ★ここ！好みの数字（12〜16など）に変えてください
-				                }
-				            }
-				        },
-				        // ── 縦軸（数値）の文字サイズ指定 ──
-				        y: {
-				            ticks: {
-				                font: {
-				                    size: 14 // ★ここ！好みの数字（12〜16など）に変えてください
-				                }
-				            }
-				        }
-				    }
-				},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        // ── 横軸（日付）の文字サイズ指定 ──
+                        x: {
+                            type: 'category',
+                            ticks: {
+                                font: {
+                                    size: 14 // 好みの数字（12〜16など）に変えてください
+                                }
+                            }
+                        },
+                        // ── 縦軸（数値）の文字サイズ指定 ──
+                        y: {
+                            ticks: {
+                                font: {
+                                    size: 14 // 好みの数字（12〜16など）に変えてください
+                                }
+                            }
+                        }
+                    }
+                },
                 plugins: [workEventPlugin]
             });
 
