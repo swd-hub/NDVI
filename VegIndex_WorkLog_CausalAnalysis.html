@@ -572,7 +572,14 @@
                         worksByXPixel[keyPixel].push(work);
                     });
 
-                    Object.entries(worksByXPixel).forEach(([xStr, works]) => {
+                    const placedRects = [];
+                    const rectsOverlap = (r1, r2) => {
+                        return r1.x1 < r2.x2 && r1.x2 > r2.x1 && r1.y1 < r2.y2 && r1.y2 > r2.y1;
+                    };
+
+                    const sortedXEntries = Object.entries(worksByXPixel).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+
+                    sortedXEntries.forEach(([xStr, works]) => {
                         const xPixel = parseFloat(xStr);
 
                         ctx.strokeStyle = '#555555';
@@ -585,18 +592,46 @@
                         ctx.setLineDash([]);
 
                         works.forEach((work, idx) => {
-                            ctx.fillStyle = getWorkColorLine(work.workType);
-                            ctx.font = 'bold 14px sans-serif'; //フォントの大きさ
-                            
-                            const yOffset = chartTop + 15 + (idx * 16); //文字のオフセット調整
-                            if (yOffset > chartBottom - 20) return;
+                            ctx.font = 'bold 14px sans-serif';
+                            const text = work.workType;
+                            const textWidth = ctx.measureText(text).width;
 
-                            if (idx % 2 === 0) {
-                                ctx.textAlign = 'right';
-                                ctx.fillText(work.workType, xPixel - 4, yOffset);
+                            const alignRight = (idx % 2 === 0);
+                            
+                            let x1, x2;
+                            if (alignRight) {
+                                x1 = xPixel - textWidth - 6;
+                                x2 = xPixel - 2;
                             } else {
-                                ctx.textAlign = 'left';
-                                ctx.fillText(work.workType, xPixel + 4, yOffset);
+                                x1 = xPixel + 2;
+                                x2 = xPixel + textWidth + 6;
+                            }
+
+                            let y = chartTop + 15;
+                            const step = 16;
+
+                            while (y <= chartBottom - 20) {
+                                const currentRect = {
+                                    x1: x1,
+                                    x2: x2,
+                                    y1: y - 12,
+                                    y2: y + 4
+                                };
+
+                                const hasOverlap = placedRects.some(r => rectsOverlap(r, currentRect));
+                                if (!hasOverlap) {
+                                    placedRects.push(currentRect);
+                                    ctx.fillStyle = getWorkColorLine(work.workType);
+                                    if (alignRight) {
+                                        ctx.textAlign = 'right';
+                                        ctx.fillText(text, xPixel - 4, y);
+                                    } else {
+                                        ctx.textAlign = 'left';
+                                        ctx.fillText(text, xPixel + 4, y);
+                                    }
+                                    break;
+                                }
+                                y += step;
                             }
                         });
                     });
