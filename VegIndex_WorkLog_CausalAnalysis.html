@@ -119,6 +119,20 @@
         .btn-secondary:hover {
             background: #ddd;
         }
+        .btn-toggle {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 12px;
+            background: #f0f0f0;
+            color: #333;
+            transition: all 0.3s;
+        }
+        .btn-toggle:hover {
+            background: #ddd;
+        }
         .data-preview {
             background: white;
             border: 1px solid #ddd;
@@ -150,6 +164,14 @@
             position: relative;
             height: 500px;
             margin-bottom: 30px;
+        }
+        .chart-filename {
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+            margin-bottom: 15px;
+            font-style: italic;
         }
         .legend {
             display: flex;
@@ -313,6 +335,10 @@
                     <div>
                         <label>表示する項目（作業種別）:</label>
                         <div id="workTypeCheckboxes" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;"></div>
+                        <div style="display: flex; gap: 8px; margin-top: 10px;">
+                            <button class="btn-toggle" onclick="selectAllWorkTypes()">すべて選択</button>
+                            <button class="btn-toggle" onclick="deselectAllWorkTypes()">すべて選択しない</button>
+                        </div>
                     </div>
                 </div>
                 <button class="btn-primary" style="margin-top: 15px;" onclick="updateCharts()">チャートを更新</button>
@@ -323,6 +349,7 @@
                 <div class="chart-container">
                     <canvas id="timeSeriesChart"></canvas>
                 </div>
+                <div class="chart-filename" id="chartFilename">VegIndex_WorkLog_CausalAnalysis.html</div>
                 <div class="legend" id="chartLegend"></div>
             </div>
         </div>
@@ -699,6 +726,18 @@
             document.getElementById('chartLegend').innerHTML = html;
         }
 
+        function selectAllWorkTypes() {
+            document.querySelectorAll('#workTypeCheckboxes input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        }
+
+        function deselectAllWorkTypes() {
+            document.querySelectorAll('#workTypeCheckboxes input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        }
+
         function exportData() {
             // 日付オブジェクトをシリアライズ用に一時的に文字列形式にするマッピング
             const serializedVeg = vegIndexData.map(d => {
@@ -772,6 +811,9 @@
                     updateWorkTypeCheckboxes();
                     updateDataStatus();
                     
+                    // 4. ファイル名を表示
+                    document.getElementById('chartFilename').textContent = file.name;
+                    
                     alert('JSONデータから正常にインポートしました。');
                 } catch (error) {
                     console.error(error);
@@ -794,6 +836,7 @@
             document.getElementById('dataStatus').innerHTML = '';
             document.getElementById('indexCheckboxes').innerHTML = '';
             document.getElementById('workTypeCheckboxes').innerHTML = '';
+            document.getElementById('chartFilename').textContent = 'VegIndex_WorkLog_CausalAnalysis.html';
         }
 
         function switchTab(tabIndex) {
