@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>植生指数×農作業 時系列チャート</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         * {
             margin: 0;
@@ -355,7 +356,7 @@
         </div>
     </div>
 
-    <script>
+<script>
         let vegIndexData = [];
         let workLogData = [];
         let timeSeriesChart = null;
@@ -412,8 +413,8 @@
                 const dateStr = values[0];
                 if (!isValidDate(dateStr)) return;
 
-                const workType = values[1]; // 「項目」
-                const content = values[2] || ''; // 「内容」
+                const workType = values[1]; 
+                const content = values[2] || ''; 
 
                 const record = {
                     date: new Date(dateStr),
@@ -528,23 +529,22 @@
             }
 
             const chartData = vegIndexData;
-
             const ctx = document.getElementById('timeSeriesChart').getContext('2d');
             if (timeSeriesChart) timeSeriesChart.destroy();
 
-            const dateLabels = chartData.map(d => d.date.toISOString().split('T')[0]);
             const datasets = [];
             const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502'];
             
             selectedIndices.forEach((idx, colorIdx) => {
                 datasets.push({
                     label: `${idx}`,
-                    data: chartData.map(d => d[idx]),
+                    // ★時系列（time軸）用に、xにDateオブジェクト、yに数値をマッピング
+                    data: chartData.map(d => ({ x: d.date, y: d[idx] })),
                     borderColor: colors[colorIdx % colors.length],
                     backgroundColor: colors[colorIdx % colors.length] + '30',
-                    borderWidth: 3, //線の太さ調整
-                    pointRadius: 5,      // ← ★これらを追加！（例: 5 で大きめのドットになります）
-        			pointHoverRadius: 7, // ← ★マウスを乗せたときのドットの大きさ
+                    borderWidth: 3, 
+                    pointRadius: 5,      
+                    pointHoverRadius: 7, 
                     tension: 0.1,
                     fill: false
                 });
@@ -558,38 +558,17 @@
                     const chartTop = chart.chartArea.top;
                     const chartBottom = chart.chartArea.bottom;
 
-                    const dateToPixelMap = {};
-                    dateLabels.forEach((label, idx) => {
-                        dateToPixelMap[label] = xScale.getPixelForValue(idx);
-                    });
-
                     const worksByXPixel = {};
                     
                     workLogData.forEach(work => {
                         if (!selectedWorkTypes.includes(work.workType)) return;
                         
-                        const workDateStr = work.date.toISOString().split('T')[0];
-                        let xPixel = dateToPixelMap[workDateStr];
-                        
-                        if (xPixel === undefined) {
-                            const workDate = new Date(workDateStr);
-                            let minDiff = Infinity;
-                            let bestIndex = -1;
-                            
-                            dateLabels.forEach((label, idx) => {
-                                const labelDate = new Date(label);
-                                const diff = Math.abs(labelDate - workDate);
-                                if (diff < minDiff) {
-                                    minDiff = diff;
-                                    bestIndex = idx;
-                                }
-                            });
-                            
-                            if (bestIndex === -1 || minDiff > 30 * 24 * 60 * 60 * 1000) return;
-                            xPixel = xScale.getPixelForValue(bestIndex);
-                        }
+                        // ★time軸なので、作業日のDateオブジェクトから直接正確なピクセル位置を取得できます
+                        const xPixel = xScale.getPixelForValue(work.date);
 
                         if (xPixel === undefined || isNaN(xPixel)) return;
+                        // グラフ表示エリア外の日付はスキップ
+                        if (xPixel < chart.chartArea.left || xPixel > chart.chartArea.right) return;
 
                         let keyPixel = Object.keys(worksByXPixel).find(p => Math.abs(parseFloat(p) - xPixel) < 3);
                         if (!keyPixel) {
@@ -668,34 +647,38 @@
             timeSeriesChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: dateLabels,
                     datasets: datasets
                 },
-				options: {
-				    responsive: true,
-				    maintainAspectRatio: false,
-				    interaction: { mode: 'index', intersect: false },
-				    plugins: { legend: { display: false } },
-				    scales: { 
-				        // ── 横軸（日付）の文字サイズ指定 ──
-				        x: { 
-				            type: 'category',
-				            ticks: {
-				                font: {
-				                    size: 14 // ★ここ！好みの数字（12〜16など）に変えてください
-				                }
-				            }
-				        },
-				        // ── 縦軸（数値）の文字サイズ指定 ──
-				        y: {
-				            ticks: {
-				                font: {
-				                    size: 14 // ★修正部分：文字サイズを適切な大きさ（14）に指定
-				                }
-				            }
-				        }
-				    }
-				},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        x: { 
+                            // ★ここを時系列軸に変更しました
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                displayFormats: {
+                                    day: 'yyyy-MM-dd'
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: 14 
+                                }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                font: {
+                                    size: 14 
+                                }
+                            }
+                        }
+                    }
+                },
                 plugins: [workEventPlugin]
             });
 
@@ -739,7 +722,6 @@
         }
 
         function exportData() {
-            // 日付オブジェクトをシリアライズ用に一時的に文字列形式にするマッピング
             const serializedVeg = vegIndexData.map(d => {
                 const res = { ...d };
                 res.date = d.date.toISOString().split('T')[0];
@@ -759,12 +741,10 @@
             a.click();
         }
 
-        // インポート用ファイルの選択画面を起動
         function triggerImport() {
             document.getElementById('importFile').click();
         }
 
-        // JSONファイルを読み込み、テキストエリアとグラフを復元する
         function importData(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -779,7 +759,6 @@
                         return;
                     }
 
-                    // 1. 植生指数データの復元とテキストエリアへの書き戻し
                     vegIndexData = data.vegIndexData.map(d => ({ ...d, date: new Date(d.date) }));
                     vegIndexData.sort((a, b) => a.date - b.date);
                     
@@ -794,7 +773,6 @@
                     });
                     document.getElementById('vegIndexInput').value = vegText.trim();
 
-                    // 2. 農作業データの復元とテキストエリアへの書き戻し
                     workLogData = data.workLogData.map(w => ({ ...w, date: new Date(w.date) }));
                     workLogData.sort((a, b) => a.date - b.date);
                     
@@ -804,14 +782,12 @@
                     });
                     document.getElementById('workLogInput').value = workText.trim();
 
-                    // 3. UIの更新
                     updateVegPreview();
                     updateWorkPreview();
                     updateIndexCheckboxes();
                     updateWorkTypeCheckboxes();
                     updateDataStatus();
                     
-                    // 4. ファイル名を表示
                     document.getElementById('chartFilename').textContent = file.name;
                     
                     alert('JSONデータから正常にインポートしました。');
@@ -819,7 +795,6 @@
                     console.error(error);
                     alert('ファイルの読み込みに失敗しました。有効なJSONファイルか確認してください。');
                 }
-                // 同じファイルを連続選択できるようにリセット
                 event.target.value = '';
             };
             reader.readAsText(file);
