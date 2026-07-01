@@ -1363,7 +1363,7 @@
           <div class="fsp-chart-wrap">
             <canvas id="fsp-chart" height="250"></canvas>
           </div>
-          <div class="fsp-section-title" style="margin-top:14px;">f(x) = x^2</div>
+          <div class="fsp-section-title" style="margin-top:14px;">RVI(光)時系列グラフ（中央値）</div>
           <div class="fsp-chart-wrap">
             <canvas id="fsp-func-x2-chart" height="250"></canvas>
           </div>
@@ -4694,56 +4694,6 @@ function computePolygonMedian(fileKey, ring) {
       return vals.length > 0 ? { median: medianOf(vals), cnt: vals.length } : null;
     }
 
-    // =====================================================
-    // ファイル名から生バンド名を取得 (B02/B03/B04/B08 等)
-    // 例: "...Sentinel-2_L2A_B04_(Raw).tiff" → "B04"
-    // =====================================================
-    function getBandFromFilename(name) {
-      const m = name.match(/_L2A_(B\d+[A-Z]?)_?\(Raw\)/i);
-      if (m) return m[1].toUpperCase();
-
-      // Sentinel-1 VV/VH 認識（複数出現時は末尾の有効なマッチを優先）
-      const up = name.toUpperCase();
-      const lastVV = up.lastIndexOf('VV');
-      const lastVH = up.lastIndexOf('VH');
-
-      const isValidBand = (idx) => {
-        if (idx === -1) return false;
-        const prev = idx === 0 ? '' : name[idx - 1];
-        if (prev !== '' && prev !== '_' && prev !== '-') return false;
-        const next = idx + 2 >= name.length ? '' : name[idx + 2];
-        if (next !== '' && next !== '_' && next !== '-' && next !== '.') return false;
-        return true;
-      };
-
-      const vvValid = isValidBand(lastVV);
-      const vhValid = isValidBand(lastVH);
-
-      if (vvValid && vhValid) {
-        return lastVV > lastVH ? 'VV' : 'VH';
-      } else if (vvValid) {
-        return 'VV';
-      } else if (vhValid) {
-        return 'VH';
-      }
-
-      // 念のため最初の出現位置もチェック
-      const firstVV = up.indexOf('VV');
-      const firstVH = up.indexOf('VH');
-      const firstVVValid = isValidBand(firstVV);
-      const firstVHValid = isValidBand(firstVH);
-
-      if (firstVVValid && firstVHValid) {
-        return firstVV > firstVH ? 'VV' : 'VH';
-      } else if (firstVVValid) {
-        return 'VV';
-      } else if (firstVHValid) {
-        return 'VH';
-      }
-
-      return null;
-    }
-
     // autoDate セレクトを更新
     function updateAutoDateSelect() {
       const sel = document.getElementById('autoDate');
@@ -5374,74 +5324,65 @@ function computePolygonMedian(fileKey, ring) {
 
 
     function renderFunctionX2Chart(dates, rows, indices) {
+      // Replace previous f(x)=x^2 plot with RVI (optical) median time-series
       if (_fspFuncX2Chart) { _fspFuncX2Chart.destroy(); _fspFuncX2Chart = null; }
-      
+
       const canvasEl = document.getElementById('fsp-func-x2-chart');
       if (!canvasEl) return;
-      
       const ctx = canvasEl.getContext('2d');
 
-      const IDX_PALETTE = {
-        NDVI:  { border:'#16a34a', bg:'rgba(22,163,74,0.12)' },
-        EVI:   { border:'#3b82f6', bg:'rgba(59,130,246,0.12)' },
-        SAVI:  { border:'#f59e0b', bg:'rgba(245,158,11,0.12)' },
-        MSAVI: { border:'#8b5cf6', bg:'rgba(139,92,246,0.12)' },
-        GNDVI: { border:'#06b6d4', bg:'rgba(6,182,212,0.12)' },
-        RVI:   { border:'#be185d', bg:'rgba(190,24,93,0.12)' },
-        RVI_S1: { border:'#0891b2', bg:'rgba(8,145,178,0.12)' }
-      };
-
-      if (dates.length === 0) {
-        _fspFuncX2Chart = new Chart(ctx, {
-          type: 'line',
-          data: { datasets: [] },
-          options: { responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } } }
-        });
+      if (!dates || dates.length === 0) {
+        _fspFuncX2Chart = new Chart(ctx, { type: 'line', data: { datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
         return;
       }
 
-      // ── 日数ベースのx軸を計算 ──
+      // 日数ベースの x 値（最初の日を基準）
       const firstDate = new Date(dates[0]);
       const dateNumericValues = dates.map(d => {
         const date = new Date(d);
-        const daysSinceFirst = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24));
-        return daysSinceFirst;
+        return Math.floor((date - firstDate) / (1000 * 60 * 60 * 24));
       });
 
-      // ── 指数ごとに時系列データを構築（f(x) = x^2） ──
-      const datasets = indices.map(idx => {
-        const pal = IDX_PALETTE[idx] || { border:'#64748b', bg:'rgba(100,116,139,0.1)' };
-        return {
-          label: idx,
-          data: rows.map((r, i) => ({
-            x: dateNumericValues[i],
-            y: r[idx] !== undefined && r[idx] !== null ? Math.pow(r[idx], 2) : null
-          })),
+      // RVI（光学）を抽出（キーは 'RVI'）
+      const dataPoints = rows.map((r, i) => {
+        const v = (r && (r.RVI !== undefined)) ? r.RVI : null;
+        return { x: dateNumericValues[i], y: (v === null ? null : v) };
+      });
+
+      // 自動スケール（データがある場合）
+      const numericVals = dataPoints.map(p => p.y).filter(v => isFinite(v));
+      let yMin = 0, yMax = 1;
+      if (numericVals.length) {
+        yMin = Math.min(...numericVals);
+        yMax = Math.max(...numericVals);
+        const pad = (yMax - yMin) * 0.12 || Math.max(0.1, yMax * 0.1);
+        yMin = Math.max(0, yMin - pad);
+        yMax = yMax + pad;
+      }
+
+      const pal = { border: '#be185d', bg: 'rgba(190,24,93,0.12)' };
+
+      _fspFuncX2Chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [{
+          label: 'RVI (光) — 中央値',
+          data: dataPoints,
           borderColor: pal.border,
           backgroundColor: pal.bg,
           borderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 6,
           pointBackgroundColor: pal.border,
-          fill: indices.length === 1,
+          fill: true,
           tension: 0.3,
           spanGaps: true
-        };
-      });
-
-      _fspFuncX2Chart = new Chart(ctx, {
-        type: 'line',
-        data: { datasets },
+        }]},
         options: {
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: {
-              display: indices.length > 1,
-              labels: { font: { size: 10 }, boxWidth: 12 }
-            },
+            legend: { display: false },
             tooltip: {
               enabled: true,
               callbacks: {
@@ -5451,7 +5392,7 @@ function computePolygonMedian(fileKey, ring) {
                   dateObj.setDate(dateObj.getDate() + daysOffset);
                   return dateObj.toISOString().split('T')[0];
                 },
-                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(6) : '—')
+                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(4) : '—')
               }
             }
           },
@@ -5471,10 +5412,10 @@ function computePolygonMedian(fileKey, ring) {
               title: { display: true, text: '日付', font: { size: 9 } }
             },
             y: {
-              min: 0,
-              max: 1,
+              min: yMin,
+              max: yMax,
               ticks: { font: { size: 10 } },
-              title: { display: true, text: 'f(x) = x^2', font: { size: 9 } }
+              title: { display: true, text: 'RVI（中央値）', font: { size: 9 } }
             }
           }
         }
