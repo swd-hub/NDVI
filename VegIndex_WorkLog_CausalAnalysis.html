@@ -272,17 +272,19 @@
                 <div class="section-title">植生指数データ（時系列）</div>
                 <div class="info-box">
                     📋 形式: 日付（YYYY-MM-DD）と指数をタブまたはカンマで区切ってください。<br>
-                    例: 2024-01-01	0.25	0.46	0.22	0.41	0.25 (日付, EVI, GNDVI, MSAVI, NDVI, SAVI)<br>
-                    ⚠️ <strong>重要</strong>: ヘッダー行で指定した列順序が、入力データの列順序と一致していることを確認してください。
+                    例: 2024-01-01	0.25	0.46	0.22	0.41	1.63		0.25 (日付, EVI, GNDVI, MSAVI, NDVI, RVI, RVI_S1, SAVI)<br>
+                    ⚠️ <strong>重要</strong>: ヘッダー行で指定した列順序が、入力データの列順序と一致していることを確認してください。<br>
+                    🛰️ RVI_S1（Sentinel-1 SARのRVI）は一部の日付のみ値がある行があっても構いません。空欄の列はそのまま欠損として扱われます。<br>
+                    📈 <strong>RVI_S1</strong> は他の指数と同じメイングラフに、<strong>RVI</strong>（光学）はその下の専用グラフに表示されます。
                 </div>
                 <div class="input-group">
                     <div class="input-column">
                         <label>植生指数データ（テキスト貼り付け）:</label>
-                        <textarea id="vegIndexInput" placeholder="日付	EVI	GNDVI	MSAVI	NDVI	SAVI&#10;2024-01-01	0.25	0.46	0.22	0.41	0.25&#10;2024-01-08	0.28	0.49	0.25	0.44	0.28"></textarea>
+                        <textarea id="vegIndexInput" placeholder="日付	EVI	GNDVI	MSAVI	NDVI	RVI	RVI_S1	SAVI&#10;2024-01-01	0.25	0.46	0.22	0.41	1.63		0.25&#10;2024-01-08	0.28	0.49	0.25	0.44	1.72		0.28&#10;2024-01-12								0.48"></textarea>
                     </div>
                     <div class="input-column">
                         <label>ヘッダー行（先頭行）:</label>
-                        <input type="text" id="vegHeaderInput" value="日付,EVI,GNDVI,MSAVI,NDVI,SAVI" placeholder="カンマ区切り">
+                        <input type="text" id="vegHeaderInput" value="日付,EVI,GNDVI,MSAVI,NDVI,RVI,RVI_S1,SAVI" placeholder="カンマ区切り">
                         <button class="btn-primary" onclick="parseVegData()">植生指数データを読み込む</button>
                         <div id="vegDataPreview" class="data-preview">
                             <p style="color: #999;">データは読み込まれていません</p>
@@ -353,6 +355,14 @@
                 <div class="chart-filename" id="chartFilename">VegIndex_WorkLog_CausalAnalysis.html</div>
                 <div class="legend" id="chartLegend"></div>
             </div>
+
+            <div class="section" id="rviSection" style="display: none;">
+                <div class="section-title">RVI（光学）時系列チャート</div>
+                <div class="chart-container">
+                    <canvas id="timeSeriesChartRVI"></canvas>
+                </div>
+                <div class="legend" id="chartLegendRVI"></div>
+            </div>
         </div>
     </div>
 
@@ -360,6 +370,14 @@
         let vegIndexData = [];
         let workLogData = [];
         let timeSeriesChart = null;
+        let timeSeriesChartRVI = null;
+
+        // ==============================================
+        // ★線の太さ調整用パラメータ（ここの数値を変えるだけでOK）
+        // ==============================================
+        const LINE_WIDTH = 4;           // 植生指数の折れ線の太さ（px）
+        const WORK_EVENT_LINE_WIDTH = 2.0; // 農作業日を示す垂直の破線の太さ（px）
+        // ==============================================
 
         function parseVegData() {
             const input = document.getElementById('vegIndexInput').value.trim();
@@ -443,13 +461,13 @@
             }
 
             let html = '<table><thead><tr><th>日付</th>';
-            const indices = Object.keys(vegIndexData[0]).filter(k => k !== 'date');
+            const indices = getAllIndexKeys();
             indices.forEach(idx => html += `<th>${idx}</th>`);
             html += '</tr></thead><tbody>';
 
             vegIndexData.forEach(record => {
                 html += `<tr><td>${record.date.toISOString().split('T')[0]}</td>`;
-                indices.forEach(idx => html += `<td>${(record[idx] || 0).toFixed(4)}</td>`);
+                indices.forEach(idx => html += `<td>${record[idx] !== undefined ? record[idx].toFixed(4) : '-'}</td>`);
                 html += '</tr>';
             });
 
@@ -472,13 +490,24 @@
             preview.innerHTML = html;
         }
 
+        function getAllIndexKeys() {
+            // ★複数レコードにまたがるキーの和集合を取る（RVI_S1のように一部の日付のみ値がある列に対応）
+            const keySet = new Set();
+            vegIndexData.forEach(record => {
+                Object.keys(record).forEach(k => {
+                    if (k !== 'date') keySet.add(k);
+                });
+            });
+            return Array.from(keySet);
+        }
+
         function updateIndexCheckboxes() {
             const container = document.getElementById('indexCheckboxes');
             if (!container) return;
             container.innerHTML = '';
 
             if (vegIndexData.length === 0) return;
-            const indices = Object.keys(vegIndexData[0]).filter(k => k !== 'date');
+            const indices = getAllIndexKeys();
             
             indices.forEach(idx => {
                 const label = document.createElement('label');
@@ -514,43 +543,29 @@
             status.innerHTML = `✅ 植生指数: ${vegIndexData.length} 日時点 | ✅ 農作業: ${workLogData.length} 件`;
         }
 
-        function updateCharts() {
-            if (vegIndexData.length === 0) {
-                alert('植生指数データを先に読み込んでください');
-                return;
-            }
-
-            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked')).map(e => e.value);
-            const selectedWorkTypes = Array.from(document.querySelectorAll('#workTypeCheckboxes input:checked')).map(e => e.value);
-
-            if (selectedIndices.length === 0) {
-                alert('表示する植生指数を選択してください');
-                return;
-            }
-
+        function buildDatasets(indices, colors) {
             const chartData = vegIndexData;
-            const ctx = document.getElementById('timeSeriesChart').getContext('2d');
-            if (timeSeriesChart) timeSeriesChart.destroy();
+            return indices.map((idx, colorIdx) => ({
+                label: `${idx}`,
+                // ★時系列（time軸）用に、xにDateオブジェクト、yに数値をマッピング。
+                //   欠損値は0ではなくnullにし、spanGaps:trueでその点を無視して次の実データ点へ直接つなぐ
+                data: chartData.map(d => ({
+                    x: d.date,
+                    y: d[idx] !== undefined ? d[idx] : null
+                })),
+                spanGaps: true,
+                borderColor: colors[colorIdx % colors.length],
+                backgroundColor: colors[colorIdx % colors.length] + '30',
+                borderWidth: LINE_WIDTH, // ★折れ線の太さ（上部のLINE_WIDTHを変更）
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                tension: 0.1,
+                fill: false
+            }));
+        }
 
-            const datasets = [];
-            const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502'];
-            
-            selectedIndices.forEach((idx, colorIdx) => {
-                datasets.push({
-                    label: `${idx}`,
-                    // ★時系列（time軸）用に、xにDateオブジェクト、yに数値をマッピング
-                    data: chartData.map(d => ({ x: d.date, y: d[idx] })),
-                    borderColor: colors[colorIdx % colors.length],
-                    backgroundColor: colors[colorIdx % colors.length] + '30',
-                    borderWidth: 3, 
-                    pointRadius: 5,      
-                    pointHoverRadius: 7, 
-                    tension: 0.1,
-                    fill: false
-                });
-            });
-
-            const workEventPlugin = {
+        function createWorkEventPlugin(selectedWorkTypes) {
+            return {
                 id: 'workEventPlugin',
                 afterDatasetsDraw(chart) {
                     const ctx = chart.ctx;
@@ -589,7 +604,7 @@
                         const xPixel = parseFloat(xStr);
 
                         ctx.strokeStyle = '#555555';
-                        ctx.lineWidth = 1.0;
+                        ctx.lineWidth = WORK_EVENT_LINE_WIDTH; // ★垂直破線の太さ（上部のWORK_EVENT_LINE_WIDTHを変更）
                         ctx.setLineDash([4, 4]);
                         ctx.beginPath();
                         ctx.moveTo(xPixel, chartTop);
@@ -643,46 +658,98 @@
                     });
                 }
             };
+        }
 
-            timeSeriesChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: false } },
-                    scales: { 
-                        x: { 
-                            // ★ここを時系列軸に変更しました
-                            type: 'time',
-                            time: {
-                                unit: 'day',
-                                displayFormats: {
-                                    day: 'yyyy-MM-dd'
-                                }
-                            },
-                            ticks: {
-                                font: {
-                                    size: 14 
-                                }
+        function makeChartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        // ★時系列軸
+                        type: 'time',
+                        time: {
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'yyyy-MM-dd'
                             }
                         },
-                        y: {
-                            ticks: {
-                                font: {
-                                    size: 14 
-                                }
+                        ticks: {
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            font: {
+                                size: 14
                             }
                         }
                     }
-                },
-                plugins: [workEventPlugin]
+                }
+            };
+        }
+
+        function updateCharts() {
+            if (vegIndexData.length === 0) {
+                alert('植生指数データを先に読み込んでください');
+                return;
+            }
+
+            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked')).map(e => e.value);
+            const selectedWorkTypes = Array.from(document.querySelectorAll('#workTypeCheckboxes input:checked')).map(e => e.value);
+
+            if (selectedIndices.length === 0) {
+                alert('表示する植生指数を選択してください');
+                return;
+            }
+
+            // ★RVIは専用の下段グラフへ、それ以外（RVI_S1含む）はメイングラフへ
+            const mainIndices = selectedIndices.filter(idx => idx !== 'RVI');
+            const rviIndices = selectedIndices.filter(idx => idx === 'RVI');
+
+            const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502', '#20c997', '#e83e8c'];
+
+            // --- メイングラフ ---
+            const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+            if (timeSeriesChart) timeSeriesChart.destroy();
+
+            const mainDatasets = buildDatasets(mainIndices, colors);
+            timeSeriesChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: mainDatasets },
+                options: makeChartOptions(),
+                plugins: [createWorkEventPlugin(selectedWorkTypes)]
             });
 
-            updateLegend();
+            // --- RVI専用グラフ（既存グラフの下） ---
+            const rviSection = document.getElementById('rviSection');
+            if (timeSeriesChartRVI) {
+                timeSeriesChartRVI.destroy();
+                timeSeriesChartRVI = null;
+            }
+
+            if (rviIndices.length > 0) {
+                rviSection.style.display = 'block';
+                const rviCtx = document.getElementById('timeSeriesChartRVI').getContext('2d');
+                const rviColors = ['#ff6b35'];
+                const rviDatasets = buildDatasets(rviIndices, rviColors);
+                timeSeriesChartRVI = new Chart(rviCtx, {
+                    type: 'line',
+                    data: { datasets: rviDatasets },
+                    options: makeChartOptions(),
+                    plugins: [createWorkEventPlugin(selectedWorkTypes)]
+                });
+                updateLegendFor('chartLegendRVI', rviIndices, rviColors);
+            } else {
+                rviSection.style.display = 'none';
+                document.getElementById('chartLegendRVI').innerHTML = '';
+            }
+
+            updateLegendFor('chartLegend', mainIndices, colors);
         }
 
         function getWorkColorLine(workType) {
@@ -695,18 +762,15 @@
             return colors[Math.abs(hash) % colors.length];
         }
 
-        function updateLegend() {
+        function updateLegendFor(containerId, indices, colors) {
             let html = '';
-            const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#ff6b6b', '#ffa502'];
-            const selectedIndices = Array.from(document.querySelectorAll('#indexCheckboxes input:checked')).map(e => e.value);
-
-            selectedIndices.forEach((idx, colorIdx) => {
+            indices.forEach((idx, colorIdx) => {
                 html += `<div class="legend-item">
                     <div class="legend-color" style="background: ${colors[colorIdx % colors.length]}"></div>
                     <span>${idx}</span>
                 </div>`;
             });
-            document.getElementById('chartLegend').innerHTML = html;
+            document.getElementById(containerId).innerHTML = html;
         }
 
         function selectAllWorkTypes() {
@@ -812,6 +876,11 @@
             document.getElementById('indexCheckboxes').innerHTML = '';
             document.getElementById('workTypeCheckboxes').innerHTML = '';
             document.getElementById('chartFilename').textContent = 'VegIndex_WorkLog_CausalAnalysis.html';
+            if (timeSeriesChart) { timeSeriesChart.destroy(); timeSeriesChart = null; }
+            if (timeSeriesChartRVI) { timeSeriesChartRVI.destroy(); timeSeriesChartRVI = null; }
+            document.getElementById('rviSection').style.display = 'none';
+            document.getElementById('chartLegend').innerHTML = '';
+            document.getElementById('chartLegendRVI').innerHTML = '';
         }
 
         function switchTab(tabIndex) {
@@ -825,41 +894,44 @@
         }
 
         window.addEventListener('load', () => {
-            const sampleVegData = `日付	EVI	GNDVI	MSAVI	NDVI	SAVI
-2025-03-20	0.1250	0.3150	0.0963	0.2450	0.1143
-2025-03-30	0.1480	0.3580	0.1263	0.2950	0.1463
-2025-04-09	0.1720	0.3980	0.1563	0.3450	0.1783
-2025-04-19	0.2050	0.4450	0.1863	0.3950	0.2150
-2025-04-29	0.2480	0.5050	0.2263	0.4550	0.2683
-2025-05-09	0.2950	0.5550	0.2663	0.5050	0.3250
-2025-05-19	0.3380	0.5950	0.3063	0.5450	0.3783
-2025-05-29	0.3750	0.6250	0.3363	0.5750	0.4150
-2025-06-08	0.4050	0.6450	0.3663	0.5950	0.4483
-2025-06-18	0.4280	0.6600	0.3863	0.6100	0.4750
-2025-06-28	0.4450	0.6700	0.4063	0.6200	0.4950
-2025-07-08	0.4580	0.6750	0.4163	0.6250	0.5083
-2025-07-18	0.4620	0.6700	0.4163	0.6200	0.5150
-2025-07-28	0.4550	0.6550	0.4063	0.6050	0.5050
-2025-08-07	0.4350	0.6250	0.3863	0.5750	0.4850
-2025-08-17	0.3950	0.5750	0.3463	0.5250	0.4350
-2025-08-27	0.3250	0.4950	0.2863	0.4550	0.3650
-2025-09-06	0.2350	0.3950	0.2063	0.3650	0.2550`;
+            const sampleVegData = `2026-03-28,0.1781,0.2281,0.1249,0.2392,1.6288,,0.1445
+2026-04-07,0.0862,0.2452,0.0695,0.2251,1.5809,,0.0870
+2026-04-12,0.1265,0.3118,0.1017,0.2938,1.8320,,0.1260
+2026-04-17,,,,,,0.4780,
+2026-04-25,0.1297,0.2717,0.1017,0.2528,1.6766,,0.1236
+2026-04-29,,,,,,0.2629,
+2026-05-05,0.1036,0.2627,0.0843,0.2899,1.8164,,0.1069
+2026-05-10,0.1265,0.2742,0.1044,0.2648,1.7205,,0.1270
+2026-05-11,,,,,,0.4083,
+2026-05-15,0.1406,0.2825,0.1114,0.2614,1.7078,,0.1339
+2026-05-17,0.1341,0.2504,0.1071,0.1987,1.4960,,0.1238
+2026-05-19,0.1442,0.2242,0.1096,0.1855,1.4554,,0.1243
+2026-05-23,,,,,,0.4808,
+2026-05-25,0.1581,0.3188,0.1255,0.3434,2.0460,,0.1532
+2026-05-30,0.2214,0.3722,0.1810,0.4015,2.3415,,0.2123
+2026-06-04,,,,,,0.4470,
+2026-06-06,0.1377,0.2295,0.1044,0.1868,1.4596,,0.1200
+2026-06-11,0.1847,0.2958,0.1428,0.2565,1.6899,,0.1612
+2026-06-17,,,,,,0.6517,`;
+
+            // ★ヘッダーはRVI_S1対応の列順（日付,EVI,GNDVI,MSAVI,NDVI,RVI,RVI_S1,SAVI）
+            document.getElementById('vegHeaderInput').value = '日付,EVI,GNDVI,MSAVI,NDVI,RVI,RVI_S1,SAVI';
 
             const sampleWorkData = `年月日	項目	内容
-2025-05-01	移植	たちすずか （面積1689.29a）
-2025-05-10	農薬散布	ジャンダルム 250ml/10a
-2025-05-15	農薬散布	ボディガードプロジャンボ 300g/10a
-2025-06-16	農薬散布	ボディガードプロジャンボ 300g/10a
-2025-07-22	農薬散布	スタークル液剤１０ 8倍希釈/10a
-2025-07-23	農薬散布	トドメバスMF液剤 200ml/10a
-2025-07-23	農薬散布	ロイヤント乳剤 100ml/10a
-2025-07-30	農薬散布	アレイルSC 500ml/10a
-2025-08-01	肥料施用	NP化成４４４ 10kg/10a
-2025-08-03	肥料施用	硫安 20kg/10a
-2025-08-09	肥料施用	硫安入NP化成 20kg/10a
-2025-08-18	農薬散布	トドメバスMF液剤 1000ml/10a
-2025-08-18	農薬散布	ロイヤント乳剤 200ml/10a
-2025-08-28	収穫	ロイヤント乳剤 200ml/10a
+2026-05-01	移植	たちすずか （面積1689.29a）
+2026-05-10	農薬散布	ジャンダルム 250ml/10a
+2026-05-15	農薬散布	ボディガードプロジャンボ 300g/10a
+2026-06-16	農薬散布	ボディガードプロジャンボ 300g/10a
+2026-07-22	農薬散布	スタークル液剤１０ 8倍希釈/10a
+2026-07-23	農薬散布	トドメバスMF液剤 200ml/10a
+2026-07-23	農薬散布	ロイヤント乳剤 100ml/10a
+2026-07-30	農薬散布	アレイルSC 500ml/10a
+2026-08-01	肥料施用	NP化成４４４ 10kg/10a
+2026-08-03	肥料施用	硫安 20kg/10a
+2026-08-09	肥料施用	硫安入NP化成 20kg/10a
+2026-08-18	農薬散布	トドメバスMF液剤 1000ml/10a
+2026-08-18	農薬散布	ロイヤント乳剤 200ml/10a
+2026-08-28	収穫	ロイヤント乳剤 200ml/10a
 `;
 
             document.getElementById('vegIndexInput').value = sampleVegData;
