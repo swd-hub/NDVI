@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copernicus GeoTIFF 山影解析（Hill Shadow Analyzer）</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root{
+    --bg:#f5f7f6;
+    --panel:#ffffff;
+    --border:#d7ddda;
+    --text:#243029;
+    --accent:#2f6b4f;
+    --accent-dark:#1f4a36;
+    --warn:#b3541e;
+    --muted:#6b7871;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:var(--accent-dark);
+    color:#fff;
+    padding:14px 20px;
+  }
+  header h1{
+    margin:0;
+    font-size:18px;
+    font-weight:600;
+  }
+  header p{
+    margin:4px 0 0;
+    font-size:12px;
+    color:#cfe3d6;
+  }
+  .layout{
+    display:flex;
+    height:calc(100vh - 62px);
+  }
+  #sidebar{
+    width:340px;
+    min-width:340px;
+    background:var(--panel);
+    border-right:1px solid var(--border);
+    padding:16px;
+    overflow-y:auto;
+  }
+  #map{
+    flex:1;
+    height:100%;
+  }
+  .section{
+    margin-bottom:20px;
+    padding-bottom:16px;
+    border-bottom:1px solid var(--border);
+  }
+  .section h2{
+    font-size:13px;
+    margin:0 0 8px;
+    color:var(--accent-dark);
+    letter-spacing:0.02em;
+  }
+  #dropzone{
+    border:2px dashed var(--border);
+    border-radius:8px;
+    padding:20px 10px;
+    text-align:center;
+    font-size:12px;
+    color:var(--muted);
+    cursor:pointer;
+    transition:background .15s, border-color .15s;
+  }
+  #dropzone.dragover{
+    background:#eaf3ee;
+    border-color:var(--accent);
+    color:var(--accent-dark);
+  }
+  #dropzone input{display:none;}
+  .file-info{
+    margin-top:8px;
+    font-size:11px;
+    color:var(--muted);
+    word-break:break-all;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    margin:8px 0 4px;
+    color:var(--text);
+  }
+  input[type=datetime-local], input[type=number], input[type=text]{
+    width:100%;
+    padding:6px 8px;
+    font-size:13px;
+    border:1px solid var(--border);
+    border-radius:5px;
+    background:#fff;
+  }
+  .row2{
+    display:flex;
+    gap:8px;
+  }
+  .row2 > div{flex:1;}
+  button{
+    width:100%;
+    padding:9px 10px;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    margin-top:10px;
+  }
+  button:disabled{
+    background:#a9bdb2;
+    cursor:not-allowed;
+  }
+  button.secondary{
+    background:#fff;
+    color:var(--accent-dark);
+    border:1px solid var(--accent);
+  }
+  #status{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:8px;
+    white-space:pre-line;
+  }
+  #progressWrap{
+    height:6px;
+    background:#e3e8e5;
+    border-radius:3px;
+    margin-top:8px;
+    overflow:hidden;
+    display:none;
+  }
+  #progressBar{
+    height:100%;
+    width:0%;
+    background:var(--accent);
+    transition:width .1s linear;
+  }
+  .sunbox{
+    display:flex;
+    gap:8px;
+    font-size:12px;
+  }
+  .sunstat{
+    flex:1;
+    background:#eef4f0;
+    border-radius:6px;
+    padding:8px;
+    text-align:center;
+  }
+  .sunstat .val{
+    font-size:16px;
+    font-weight:700;
+    color:var(--accent-dark);
+  }
+  .sunstat .lbl{
+    font-size:10px;
+    color:var(--muted);
+  }
+  .legend{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    margin-top:6px;
+  }
+  .swatch{
+    width:16px;height:16px;border-radius:3px;border:1px solid var(--border);
+  }
+  .warn{
+    color:var(--warn);
+    font-size:12px;
+    margin-top:6px;
+  }
+  .hint{
+    font-size:11px;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  a.hint-link{color:var(--accent-dark);}
+  .modeToggle{
+    display:flex;
+    gap:6px;
+    margin-bottom:10px;
+  }
+  .modeToggle label{
+    flex:1;
+    margin:0;
+    text-align:center;
+    font-size:12px;
+    padding:7px 4px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    cursor:pointer;
+    background:#fff;
+    color:var(--muted);
+  }
+  .modeToggle label.active{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
+  .tileSourceList{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:6px;
+    line-height:1.6;
+  }
+  .row2 button{
+    flex:1;
+    margin-top:0;
+  }
+  .leaflet-popup-content button{
+    width:auto;
+  }
+  .gjDrop{
+    border:2px dashed #3b82f6;
+    border-radius:6px;
+    padding:14px 10px;
+    text-align:center;
+    background:rgba(59,130,246,0.05);
+    cursor:pointer;
+    font-size:12px;
+    color:#2563a8;
+    font-weight:600;
+    margin-bottom:8px;
+  }
+  .gjDrop.dragover{ background:rgba(59,130,246,0.15); }
+  .gjLayerList{
+    list-style:none; margin:0; padding:0;
+    display:flex; flex-direction:column; gap:4px;
+    max-height:220px; overflow-y:auto;
+  }
+  .gjLayerItem{
+    display:flex; align-items:center; gap:6px;
+    padding:6px 8px;
+    background:#f7f9f8;
+    border:1px solid var(--border);
+    border-left:3px solid #3b82f6;
+    border-radius:4px;
+    font-size:11px;
+  }
+  .gjLayerItem.hidden{ opacity:0.45; }
+  .gjLayerName{
+    flex:1; min-width:0; font-weight:700;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .gjLayerMeta{ font-size:10px; color:var(--muted); }
+  .gjIconBtn{
+    background:none; border:1px solid var(--border); border-radius:4px;
+    font-size:11px; padding:3px 6px; cursor:pointer; flex-shrink:0;
+  }
+  .gjIconBtn:hover{ background:#eef4f0; border-color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Copernicus GeoTIFF 山影解析（Hill Shadow Analyzer）</h1>
+  <p>DEM（標高）GeoTIFF ＋ 日時 → 太陽位置から山影レイヤーを地図に重畳表示</p>
+</header>
+
+<div class="layout">
+  <div id="sidebar">
+
+    <div class="section">
+      <h2>① 標高データ入力</h2>
+      <div class="modeToggle">
+        <label id="modeLabelFile" class="active"><input type="radio" name="demMode" id="modeFile" value="file" checked>GeoTIFFファイル</label>
+        <label id="modeLabelTile"><input type="radio" name="demMode" id="modeTile" value="tile">地理院タイル自動取得</label>
+      </div>
+
+      <div id="fileModePanel">
+        <div id="dropzone">
+          ここにDEM GeoTIFFをドラッグ＆ドロップ<br>またはクリックして選択
+          <input type="file" id="fileInput" accept=".tif,.tiff">
+        </div>
+        <div class="file-info" id="fileInfo">未読み込み</div>
+        <div class="hint">Copernicus DEM (GLO-30 / GLO-90) のGeoTIFFを想定。EPSG:4326（緯度経度）形式。</div>
+      </div>
+
+      <div id="tileModePanel" style="display:none;">
+        <label>取得範囲</label>
+        <button id="useMapBoundsBtn" class="secondary" style="margin-top:0;">現在の地図表示範囲を使う</button>
+        <div class="row2" style="margin-top:8px;">
+          <div><label>西経度</label><input type="number" id="tileWest" step="0.0001" value="132.72"></div>
+          <div><label>東経度</label><input type="number" id="tileEast" step="0.0001" value="132.78"></div>
+        </div>
+        <div class="row2">
+          <div><label>南緯度</label><input type="number" id="tileSouth" step="0.0001" value="35.35"></div>
+          <div><label>北緯度</label><input type="number" id="tileNorth" step="0.0001" value="35.41"></div>
+        </div>
+        <label>ズームレベル</label>
+        <input type="number" id="tileZoom" value="15" min="10" max="17" step="1">
+        <div class="hint">ズームが大きいほど高解像度（15でおおむね数m〜10m/pxが目安）。範囲が広い場合はタイル数が増え取得に時間がかかる。</div>
+        <button id="fetchTilesBtn">地理院タイルを取得</button>
+        <div class="tileSourceList">
+          取得優先順位：DEM5A（航空レーザ5m）→DEM5B/5C（写真測量5m）→DEM10B（10m）<br>
+          未整備エリアは自動的に粗い解像度にフォールバックします。
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>② 観測日時（現地時間）</h2>
+      <input type="datetime-local" id="datetimeInput">
+      <div class="hint">Sentinel-2の出雲付近の通過時刻はおおむね午前10時台。まずはその時刻を入れて試すと良い。</div>
+      <label>最大探索距離（m）</label>
+      <input type="number" id="maxDist" value="3000" min="200" max="20000" step="100">
+      <div class="hint">影を落とす可能性のある山の最大探索距離。大きいほど正確だが計算が重くなる。</div>
+    </div>
+
+    <div class="section">
+      <h2>③ 太陽位置</h2>
+      <div class="sunbox">
+        <div class="sunstat"><div class="val" id="sunAlt">--°</div><div class="lbl">太陽高度角</div></div>
+        <div class="sunstat"><div class="val" id="sunAz">--°</div><div class="lbl">太陽方位角</div></div>
+      </div>
+      <div class="warn" id="nightWarn" style="display:none;">太陽高度角が0°以下です（日の出前／日没後）。全域が陰になります。</div>
+    </div>
+
+    <div class="section">
+      <h2>④ 実行</h2>
+      <button id="computeBtn" disabled>山影レイヤーを計算</button>
+      <button id="clearBtn" class="secondary">レイヤーをクリア</button>
+      <div id="progressWrap"><div id="progressBar"></div></div>
+      <div id="status">DEMファイルを読み込んでください。</div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>凡例</h2>
+      <div class="legend"><div class="swatch" style="background:rgba(20,30,60,0.55);"></div>山影（日照が遮られる範囲）</div>
+      <div class="legend"><div class="swatch" style="background:transparent;"></div>日向（そのまま地図が見える）</div>
+      <div class="hint" style="margin-top:10px;">
+        判定方式：各画素から太陽方位の逆方向へ地形をレイキャストし、太陽高度角の勾配を遮る地形があれば「陰」と判定（ハードシャドウ）。GLO-30の解像度は約30mのため、ほ場単位の細かい陰影までは表現できません。
+      </div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>⑤ GeoJSONレイヤー（eMAFF農地ナビ等）</h2>
+      <div class="gjDrop" id="gjDrop">
+        クリックまたはドラッグ＆ドロップ<br>
+        <span style="font-weight:400;font-size:10px;">.geojson / .json（複数可）</span>
+      </div>
+      <input type="file" id="gjInput" style="display:none;" accept=".geojson,.json" multiple>
+      <ul class="gjLayerList" id="gjLayerList"></ul>
+      <div id="gjLayerEmpty" class="hint" style="text-align:center;padding:6px 0;">読み込み済みレイヤーなし</div>
+      <button id="clearGjLayersBtn" class="secondary">レイヤーをすべて削除</button>
+      <div class="hint" style="margin-top:8px;">
+        eMAFF農地ナビからエクスポートしたポリゴンGeoJSONをそのまま読み込めます。地番・住所・地目・農振法区分などの属性がある場合はポップアップに表示されます。全フィーチャーが点（Point）のみのファイルは自動的にピンとして追加されます。
+      </div>
+    </div>
+
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  // ---------- 状態 ----------
+  let demData = null; // {width,height,bbox:[w,s,e,n],elev:Float32Array,noData}
+  let map = null;
+  let shadowOverlay = null;
+  let demBoundsLayer = null;
+
+  const el = id => document.getElementById(id);
+  const statusEl = el('status');
+  const computeBtn = el('computeBtn');
+  const clearBtn = el('clearBtn');
+  const progressWrap = el('progressWrap');
+  const progressBar = el('progressBar');
+
+  function setStatus(msg){ statusEl.textContent = msg; }
+
+  // ---------- 地図初期化 ----------
+  map = L.map('map').setView([35.38, 132.75], 11); // 出雲・斐川周辺を初期表示
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // ---------- 日時の初期値 ----------
+  (function initDatetime(){
+    const now = new Date();
+    now.setHours(10,30,0,0);
+    const pad = n => String(n).padStart(2,'0');
+    const val = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    el('datetimeInput').value = val;
+  })();
+
+  // ---------- ファイル読み込み ----------
+  const dropzone = el('dropzone');
+  const fileInput = el('fileInput');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files && e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  async function handleFile(file){
+    setStatus('GeoTIFFを読み込み中...');
+    el('fileInfo').textContent = file.name + '（' + (file.size/1024/1024).toFixed(1) + ' MB）';
+    try{
+      const buf = await file.arrayBuffer();
+      const tiff = await GeoTIFF.fromArrayBuffer(buf);
+      const image = await tiff.getImage();
+      const width = image.getWidth();
+      const height = image.getHeight();
+      const bbox = image.getBoundingBox(); // [west, south, east, north]
+
+      setStatus('標高配列を展開中...');
+      const rasters = await image.readRasters();
+      const raw = rasters[0];
+      let elev = (raw instanceof Float32Array) ? raw : Float32Array.from(raw);
+
+      const gdal = image.fileDirectory.GDAL_NODATA;
+      let noData = null;
+      if (gdal !== undefined) {
+        const p = parseFloat(gdal);
+        if (!isNaN(p)) noData = p;
+      }
+
+      applyDemData(width, height, bbox, elev, noData, `読み込み完了：${width}×${height} px`);
+    } catch(err){
+      console.error(err);
+      setStatus('読み込みエラー：' + err.message);
+      computeBtn.disabled = true;
+    }
+  }
+
+  // demData確定後の共通処理（GeoTIFF読み込み／地理院タイル取得の両方から呼ぶ）
+  function applyDemData(width, height, bbox, elev, noData, summaryMsg){
+    demData = { width, height, bbox, elev, noData };
+
+    const bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
+    map.fitBounds(bounds);
+    if (demBoundsLayer) map.removeLayer(demBoundsLayer);
+    demBoundsLayer = L.rectangle(bounds, { color: '#2f6b4f', weight: 1, fill: false, dashArray: '4,4' }).addTo(map);
+
+    setStatus(`${summaryMsg}\n範囲：西${bbox[0].toFixed(4)} 東${bbox[2].toFixed(4)} 南${bbox[1].toFixed(4)} 北${bbox[3].toFixed(4)}`);
+    computeBtn.disabled = false;
+    updateSunPosition();
+  }
+
+  el('datetimeInput').addEventListener('change', updateSunPosition);
+
+  // ---------- 入力モード切替（GeoTIFFファイル／地理院タイル） ----------
+  const modeFile = el('modeFile');
+  const modeTile = el('modeTile');
+  const fileModePanel = el('fileModePanel');
+  const tileModePanel = el('tileModePanel');
+  const modeLabelFile = el('modeLabelFile');
+  const modeLabelTile = el('modeLabelTile');
+
+  function refreshModeUI(){
+    const isTile = modeTile.checked;
+    fileModePanel.style.display = isTile ? 'none' : 'block';
+    tileModePanel.style.display = isTile ? 'block' : 'none';
+    modeLabelFile.classList.toggle('active', !isTile);
+    modeLabelTile.classList.toggle('active', isTile);
+  }
+  modeFile.addEventListener('change', refreshModeUI);
+  modeTile.addEventListener('change', refreshModeUI);
+
+  el('useMapBoundsBtn').addEventListener('click', () => {
+    const b = map.getBounds();
+    el('tileWest').value = b.getWest().toFixed(5);
+    el('tileEast').value = b.getEast().toFixed(5);
+    el('tileSouth').value = b.getSouth().toFixed(5);
+    el('tileNorth').value = b.getNorth().toFixed(5);
+  });
+
+  // ---------- 地理院タイル（標高タイル）取得 ----------
+  const TILE_SOURCES = ['dem5a_png', 'dem5b_png', 'dem5c_png', 'dem_png']; // 高精度→低精度の順
+
+  function lon2tileX(lon, z){ return (lon + 180) / 360 * Math.pow(2, z); }
+  function lat2tileY(lat, z){
+    const latRad = lat * Math.PI / 180;
+    return (1 - Math.log(Math.tan(latRad) + 1/Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z);
+  }
+  function tileX2lon(x, z){ return x / Math.pow(2, z) * 360 - 180; }
+  function tileY2lat(y, z){
+    const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+    return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  }
+
+  function decodeElevationPixel(r, g, b){
+    const x = r * 65536 + g * 256 + b;
+    if (x === 8388608) return null; // 2^23 = 無効値
+    if (x < 8388608) return x * 0.01;
+    return (x - 16777216) * 0.01; // x - 2^24
+  }
+
+  function loadTileImageData(url){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error('timeout'));
+      }, 8000); // 8秒応答が無ければタイムアウト扱い（ネットワーク制限等でハングするのを防ぐ）
+      img.onload = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try{
+          const c = document.createElement('canvas');
+          c.width = 256; c.height = 256;
+          const cx = c.getContext('2d');
+          cx.drawImage(img, 0, 0);
+          resolve(cx.getImageData(0, 0, 256, 256).data);
+        }catch(err){ reject(err); } // CORS由来でcanvasが汚染された場合はここで失敗
+      };
+      img.onerror = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(new Error('load failed'));
+      };
+      img.src = url;
+    });
+  }
+
+  async function fetchTileElevation(z, x, y){
+    for (const src of TILE_SOURCES){
+      const url = `https://cyberjapandata.gsi.go.jp/xyz/${src}/${z}/${x}/${y}.png`;
+      try{
+        const data = await loadTileImageData(url);
+        const out = new Float32Array(256*256);
+        for (let i=0;i<256*256;i++){
+          const o = i*4;
+          const v = decodeElevationPixel(data[o], data[o+1], data[o+2]);
+          out[i] = (v === null) ? NaN : v;
+        }
+        return { elev: out, source: src };
+      }catch(e){ /* このソースは無し。次のフォールバック候補へ */ }
+    }
+    return null; // 全ソースで取得不可（海域・データ無しなど）
+  }
+
+  el('fetchTilesBtn').addEventListener('click', fetchGsiTiles);
+
+  async function fetchGsiTiles(){
+    const west = parseFloat(el('tileWest').value);
+    const east = parseFloat(el('tileEast').value);
+    const south = parseFloat(el('tileSouth').value);
+    const north = parseFloat(el('tileNorth').value);
+    const z = parseInt(el('tileZoom').value, 10) || 15;
+
+    if (!(east > west) || !(north > south)){
+      setStatus('取得範囲が不正です（東経度＞西経度、北緯度＞南緯度になるように指定してください）。');
+      return;
+    }
+
+    const x0 = Math.floor(lon2tileX(west, z));
+    const x1 = Math.floor(lon2tileX(east, z));
+    const y0 = Math.floor(lat2tileY(north, z));
+    const y1 = Math.floor(lat2tileY(south, z));
+    const numTilesX = x1 - x0 + 1;
+    const numTilesY = y1 - y0 + 1;
+    const totalTiles = numTilesX * numTilesY;
+
+    if (totalTiles > 400){
+      setStatus(`タイル数が多すぎます（${totalTiles}枚）。範囲を狭めるかズームを下げてください。`);
+      return;
+    }
+
+    el('fetchTilesBtn').disabled = true;
+    progressWrap.style.display = 'block';
+    progressBar.style.width = '0%';
+    setStatus(`地理院タイルを取得中... 0/${totalTiles}`);
+
+    const mergedWidth = numTilesX * 256;
+    const mergedHeight = numTilesY * 256;
+    const elevMerged = new Float32Array(mergedWidth * mergedHeight).fill(NaN);
+    const sourceCount = {};
+
+    let done = 0;
+    for (let ty=0; ty<numTilesY; ty++){
+      for (let tx=0; tx<numTilesX; tx++){
+        const result = await fetchTileElevation(z, x0+tx, y0+ty);
+        if (result){
+          sourceCount[result.source] = (sourceCount[result.source]||0) + 1;
+          for (let row=0; row<256; row++){
+            const destRow = ty*256 + row;
+            const destOffset = destRow*mergedWidth + tx*256;
+            elevMerged.set(result.elev.subarray(row*256, row*256+256), destOffset);
+          }
+        }
+        done++;
+        progressBar.style.width = Math.round((done/totalTiles)*100) + '%';
+        setStatus(`地理院タイルを取得中... ${done}/${totalTiles}`);
+      }
+    }
+
+    // NaN（未取得・無効値）をnoData値に変換して既存ロジックと互換にする
+    const NODATA = -9999;
+    for (let i=0;i<elevMerged.length;i++){
+      if (isNaN(elevMerged[i])) elevMerged[i] = NODATA;
+    }
+
+    const bbox = [tileX2lon(x0, z), tileY2lat(y1+1, z), tileX2lon(x1+1, z), tileY2lat(y0, z)]; // [west, south, east, north]
+
+    const sourceSummary = Object.entries(sourceCount).map(([k,v]) => `${k}:${v}枚`).join(' / ') || 'なし';
+
+    progressWrap.style.display = 'none';
+    el('fetchTilesBtn').disabled = false;
+
+    applyDemData(mergedWidth, mergedHeight, bbox, elevMerged, NODATA,
+      `地理院タイル取得完了：${mergedWidth}×${mergedHeight} px（${totalTiles}タイル）\n内訳：${sourceSummary}`);
+  }
+
+  function updateSunPosition(){
+    if (!demData) return;
+    const dt = el('datetimeInput').value;
+    if (!dt) return;
+    const date = new Date(dt);
+    const lat = (demData.bbox[1] + demData.bbox[3]) / 2;
+    const lon = (demData.bbox[0] + demData.bbox[2]) / 2;
+    const sun = getSunPosition(date, lat, lon);
+    el('sunAlt').textContent = sun.altitudeDeg.toFixed(1) + '°';
+    el('sunAz').textContent = sun.azimuthDeg.toFixed(1) + '°';
+    el('nightWarn').style.display = (sun.altitudeDeg <= 0) ? 'block' : 'none';
+  }
+
+  // ---------- 太陽位置計算（NOAA準拠の簡易アルゴリズム） ----------
+  // 戻り値: altitudeDeg（地平線からの高度角）, azimuthDeg（北を0とし東回り）
+  function getSunPosition(date, latDeg, lonDeg){
+    const rad = Math.PI / 180;
+    const JD = toJulianDate(date);
+    const T = (JD - 2451545.0) / 36525.0;
+
+    // 太陽の平均黄経・平均近点角
+    const L0 = normDeg(280.46646 + T*(36000.76983 + T*0.0003032));
+    const M  = normDeg(357.52911 + T*(35999.05029 - 0.0001537*T));
+    const e  = 0.016708634 - T*(0.000042037 + 0.0000001267*T);
+
+    const Mrad = M * rad;
+    const C = (1.914602 - T*(0.004817 + 0.000014*T)) * Math.sin(Mrad)
+             + (0.019993 - 0.000101*T) * Math.sin(2*Mrad)
+             + 0.000289 * Math.sin(3*Mrad);
+
+    const trueLong = L0 + C;
+    const omega = 125.04 - 1934.136*T;
+    const lambda = trueLong - 0.00569 - 0.00478*Math.sin(omega*rad);
+
+    const epsilon0 = 23 + (26 + (21.448 - T*(46.815 + T*(0.00059 - T*0.001813)))/60)/60;
+    const epsilon = epsilon0 + 0.00256*Math.cos(omega*rad);
+
+    const lambdaRad = lambda * rad;
+    const epsilonRad = epsilon * rad;
+
+    // 赤緯・赤経
+    const sinDec = Math.sin(epsilonRad) * Math.sin(lambdaRad);
+    const dec = Math.asin(sinDec); // ラジアン
+    const yTerm = Math.cos(epsilonRad) * Math.sin(lambdaRad);
+    const xTerm = Math.cos(lambdaRad);
+    let raRad = Math.atan2(yTerm, xTerm);
+    if (raRad < 0) raRad += 2*Math.PI;
+
+    // 均時差（分）
+    const y = Math.tan(epsilonRad/2) * Math.tan(epsilonRad/2);
+    const L0rad = L0 * rad;
+    const eqTime = 4 * (y*Math.sin(2*L0rad) - 2*e*Math.sin(Mrad) + 4*e*y*Math.sin(Mrad)*Math.cos(2*L0rad)
+                  - 0.5*y*y*Math.sin(4*L0rad) - 1.25*e*e*Math.sin(2*Mrad)) / rad;
+
+    // 太陽時角
+    const utcHours = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+    const trueSolarTime = (utcHours*60 + eqTime + 4*lonDeg) % 1440;
+    let hourAngleDeg = trueSolarTime/4 - 180;
+    if (hourAngleDeg < -180) hourAngleDeg += 360;
+    const Hrad = hourAngleDeg * rad;
+
+    const latRad = latDeg * rad;
+    const cosZenith = Math.sin(latRad)*Math.sin(dec) + Math.cos(latRad)*Math.cos(dec)*Math.cos(Hrad);
+    const zenith = Math.acos(Math.max(-1, Math.min(1, cosZenith)));
+    const altitude = Math.PI/2 - zenith;
+
+    let cosAz = (Math.sin(dec) - Math.sin(latRad)*Math.cos(zenith)) / (Math.cos(latRad)*Math.sin(zenith));
+    cosAz = Math.max(-1, Math.min(1, cosAz));
+    let azimuth = Math.acos(cosAz);
+    if (Hrad > 0) azimuth = 2*Math.PI - azimuth; // 午後は北から東回りで180°超え
+
+    return {
+      altitudeDeg: altitude / rad,
+      azimuthDeg: azimuth / rad
+    };
+  }
+
+  function toJulianDate(date){
+    return date.getTime() / 86400000 + 2440587.5;
+  }
+  function normDeg(d){
+    d = d % 360;
+    return d < 0 ? d + 360 : d;
+  }
+
+  // ---------- 山影レイキャスト計算 ----------
+  computeBtn.addEventListener('click', computeShadow);
+  clearBtn.addEventListener('click', () => {
+    if (shadowOverlay) { map.removeLayer(shadowOverlay); shadowOverlay = null; }
+    setStatus('レイヤーをクリアしました。');
+  });
+
+  async function computeShadow(){
+    if (!demData) return;
+    computeBtn.disabled = true;
+    progressWrap.style.display = 'block';
+    progressBar.style.width = '0%';
+
+    const dt = el('datetimeInput').value;
+    const date = new Date(dt);
+    const maxDist = parseFloat(el('maxDist').value) || 3000;
+
+    const { width, height, bbox, elev, noData } = demData;
+    const centerLat = (bbox[1] + bbox[3]) / 2;
+    const sun = getSunPosition(date, centerLat, (bbox[0]+bbox[2])/2);
+
+    if (sun.altitudeDeg <= 0){
+      // 夜：全域陰
+      setStatus('太陽高度角が0°以下のため、全域を陰として描画します。');
+      renderShadowMask(new Uint8Array(width*height).fill(1), width, height, bbox);
+      progressWrap.style.display = 'none';
+      computeBtn.disabled = false;
+      return;
+    }
+
+    const rad = Math.PI/180;
+    const altRad = sun.altitudeDeg * rad;
+    const azRad = sun.azimuthDeg * rad;
+    const tanAlt = Math.tan(altRad);
+
+    // ピクセル間隔（メートル換算）
+    const pixelWidthDeg = (bbox[2]-bbox[0]) / width;
+    const pixelHeightDeg = (bbox[3]-bbox[1]) / height;
+    const metersPerDegLat = 111320;
+    const metersPerDegLon = 111320 * Math.cos(centerLat*rad);
+    const pixelWidthM = Math.abs(pixelWidthDeg) * metersPerDegLon;
+    const pixelHeightM = Math.abs(pixelHeightDeg) * metersPerDegLat;
+    const stepM = Math.max(pixelWidthM, pixelHeightM); // 1画素分ずつ進める
+
+    // 太陽方向（東、北）の単位ベクトル
+    const dEast = Math.sin(azRad);
+    const dNorth = Math.cos(azRad);
+    // ピクセル単位のステップ（row0=北端、row増加で南へ）
+    const stepPx = (dEast * stepM) / pixelWidthM;
+    const stepPy = -(dNorth * stepM) / pixelHeightM;
+
+    // DEM内の最大標高（早期打ち切り用）
+    let maxElev = -Infinity;
+    for (let i=0;i<elev.length;i++){
+      const v = elev[i];
+      if (noData!==null && v===noData) continue;
+      if (v>maxElev) maxElev = v;
+    }
+    if (!isFinite(maxElev)) maxElev = 0;
+
+    const maxSteps = Math.max(1, Math.ceil(maxDist / stepM));
+    const shadowMask = new Uint8Array(width*height);
+
+    setStatus(`計算中... 太陽高度 ${sun.altitudeDeg.toFixed(1)}° / 方位 ${sun.azimuthDeg.toFixed(1)}°\n画素数 ${width}×${height}、最大 ${maxSteps} ステップ探索`);
+
+    // 行ごとにチャンク処理してUIをブロックしない
+    let row = 0;
+    await new Promise(resolve => {
+      function processChunk(){
+        const chunkStart = performance.now();
+        while (row < height && performance.now() - chunkStart < 16){
+          for (let col=0; col<width; col++){
+            const idx = row*width + col;
+            const originElev = elev[idx];
+            if (noData!==null && originElev===noData){ shadowMask[idx]=0; continue; }
+
+            let inShadow = 0;
+            let px = col, py = row;
+            for (let s=1; s<=maxSteps; s++){
+              px += stepPx;
+              py += stepPy;
+              const ix = Math.round(px), iy = Math.round(py);
+              if (ix<0||ix>=width||iy<0||iy>=height) break; // DEM範囲外に出た＝遮る地形なし
+              const d = s*stepM;
+              const requiredHeight = originElev + d*tanAlt;
+              if (requiredHeight > maxElev) break; // これ以上遠くに遮蔽物はあり得ない
+              const tElev = elev[iy*width+ix];
+              if (noData!==null && tElev===noData) continue;
+              if (tElev > requiredHeight){ inShadow = 1; break; }
+            }
+            shadowMask[idx] = inShadow;
+          }
+          row++;
+        }
+        progressBar.style.width = Math.round((row/height)*100) + '%';
+        if (row < height){
+          setTimeout(processChunk, 0);
+        } else {
+          resolve();
+        }
+      }
+      processChunk();
+    });
+
+    renderShadowMask(shadowMask, width, height, bbox);
+    setStatus(`計算完了：太陽高度 ${sun.altitudeDeg.toFixed(1)}° / 方位 ${sun.azimuthDeg.toFixed(1)}°`);
+    progressWrap.style.display = 'none';
+    computeBtn.disabled = false;
+  }
+
+  function renderShadowMask(mask, width, height, bbox){
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(width, height);
+    for (let i=0;i<mask.length;i++){
+      const o = i*4;
+      if (mask[i]){
+        imgData.data[o]   = 15;
+        imgData.data[o+1] = 25;
+        imgData.data[o+2] = 55;
+        imgData.data[o+3] = 140; // 半透明の陰
+      } else {
+        imgData.data[o+3] = 0; // 完全透明（日向）
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const dataUrl = canvas.toDataURL();
+    const bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
+
+    if (shadowOverlay) map.removeLayer(shadowOverlay);
+    shadowOverlay = L.imageOverlay(dataUrl, bounds, { opacity: 1 }).addTo(map);
+  }
+
+  // ---------- ピン機能（GeoJSON読み込み時の自動ピン化に使用） ----------
+  const pinsLayer = L.layerGroup().addTo(map);
+  let pinSeq = 1;
+  const pinFeatures = new Map(); // id -> {marker, label, lat, lng}
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function addPin(latlng, presetLabel){
+    const id = 'pin' + (pinSeq++);
+    const name = (presetLabel !== undefined && presetLabel !== null) ? presetLabel : '';
+    const marker = L.marker(latlng).addTo(pinsLayer);
+    marker.bindPopup(buildPinPopup(id, name));
+    pinFeatures.set(id, { marker, label: name, lat: latlng.lat, lng: latlng.lng });
+  }
+
+  function buildPinPopup(id, label){
+    const div = document.createElement('div');
+    div.style.fontSize = '12px';
+    div.innerHTML = `<b>${escapeHtml(label)}</b><br><button data-pinid="${id}" class="popupDeleteBtn">削除</button>`;
+    return div;
+  }
+
+  map.on('popupopen', (e) => {
+    const node = e.popup.getElement ? e.popup.getElement() : e.popup._container;
+    const btn = node && node.querySelector('.popupDeleteBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const pinId = btn.getAttribute('data-pinid');
+      if (pinId && pinFeatures.has(pinId)){
+        pinsLayer.removeLayer(pinFeatures.get(pinId).marker);
+        pinFeatures.delete(pinId);
+      }
+      map.closePopup();
+    });
+  });
+
+  // ---------- GeoJSONレイヤー読み込み（eMAFF農地ナビ等） ----------
+  const GEO_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
+  let gjColorIdx = 0;
+  const geoLayers = {}; // key -> {layer, name, color, visible, count}
+
+  const EMAFF_SHOW_KEYS = [
+    ['Tiban', '地番'],
+    ['Address', '住所'],
+    ['ClassificationOfLandCodeName', '地目'],
+    ['AreaOnRegistry', '登記簿面積(㎡)'],
+    ['SectionOfNoushinhouCodeName', '農振法区分'],
+    ['UsageSituationInvestigationResultCodeName', '利用状況'],
+    ['KindOfRightCodeName', '権利区分'],
+  ];
+
+  const gjDrop = el('gjDrop');
+  const gjInput = el('gjInput');
+  gjDrop.addEventListener('click', () => gjInput.click());
+  gjDrop.addEventListener('dragover', e => { e.preventDefault(); gjDrop.classList.add('dragover'); });
+  gjDrop.addEventListener('dragleave', () => gjDrop.classList.remove('dragover'));
+  gjDrop.addEventListener('drop', e => {
+    e.preventDefault();
+    gjDrop.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files.length) loadGeoJSONFiles(e.dataTransfer.files);
+  });
+  gjInput.addEventListener('change', e => {
+    if (e.target.files && e.target.files.length) loadGeoJSONFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  function loadGeoJSONFiles(files){
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try{
+          const geojson = JSON.parse(e.target.result);
+          const features = geojson.type === 'FeatureCollection' ? geojson.features
+                          : geojson.type === 'Feature' ? [geojson]
+                          : [];
+
+          // 全フィーチャーがPointならピンとして追加
+          const allPoint = features.length > 0 && features.every(f => f.geometry && f.geometry.type === 'Point');
+          if (allPoint){
+            features.forEach(f => {
+              const [lng, lat] = f.geometry.coordinates;
+              const p = f.properties || {};
+              const label = p.Tiban || p['地番'] || p.name || p.Address || '';
+              addPin(L.latLng(lat, lng), label);
+            });
+            setStatus(`${features.length}件のピンを追加しました（${file.name}）`);
+            return;
+          }
+
+          // それ以外はGeoJSONレイヤーとして追加
+          const color = GEO_COLORS[gjColorIdx % GEO_COLORS.length];
+          gjColorIdx++;
+          const layer = L.geoJSON(geojson, {
+            style: () => ({ color, weight: 2, fillColor: color, fillOpacity: 0.12 }),
+            pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 6, color, fillColor: color, fillOpacity: 0.8, weight: 1.5 }),
+            onEachFeature: (feat, lyr) => {
+              const p = feat.properties || {};
+              let rows = EMAFF_SHOW_KEYS
+                .filter(([k]) => p[k] != null && p[k] !== '')
+                .map(([k, label]) => `<tr><th style="text-align:left;padding:2px 8px 2px 0;white-space:nowrap;font-size:11px;color:#64748b">${label}</th><td style="padding:2px 0;font-size:11px">${escapeHtml(String(p[k]))}</td></tr>`)
+                .join('');
+              if (!rows){
+                rows = Object.entries(p)
+                  .map(([k, v]) => `<tr><th style="text-align:left;padding:2px 6px;font-weight:bold;font-size:11px">${escapeHtml(k)}</th><td style="padding:2px 6px;font-size:11px">${escapeHtml(String(v ?? ''))}</td></tr>`)
+                  .join('');
+              }
+              if (rows){
+                lyr.bindPopup(`<table style="border-collapse:collapse">${rows}</table>`, { maxHeight: 280 });
+              }
+            }
+          }).addTo(map);
+
+          let count = 0;
+          layer.eachLayer(() => count++);
+          const key = file.name + '_' + Date.now();
+          geoLayers[key] = { layer, name: file.name, color, visible: true, count };
+          try{ map.fitBounds(layer.getBounds()); }catch(err){ /* 空ジオメトリ等は無視 */ }
+          renderGjLayerList();
+          setStatus(`GeoJSONレイヤーを追加しました（${count}フィーチャー、${file.name}）`);
+        }catch(err){
+          setStatus('GeoJSON読み込みエラー：' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  function renderGjLayerList(){
+    const ul = el('gjLayerList');
+    const empty = el('gjLayerEmpty');
+    ul.innerHTML = '';
+    const keys = Object.keys(geoLayers);
+    if (keys.length === 0){ empty.style.display = ''; return; }
+    empty.style.display = 'none';
+    keys.forEach(key => {
+      const g = geoLayers[key];
+      const li = document.createElement('li');
+      li.className = 'gjLayerItem' + (g.visible ? '' : ' hidden');
+      li.innerHTML =
+        `<div style="width:10px;height:10px;border-radius:50%;background:${g.color};flex-shrink:0;border:2px solid rgba(0,0,0,0.15)"></div>` +
+        `<div style="flex:1;min-width:0;">` +
+          `<div class="gjLayerName" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</div>` +
+          `<div class="gjLayerMeta">${g.count} フィーチャー</div>` +
+        `</div>` +
+        `<button class="gjIconBtn visBtn" title="表示切替">${g.visible ? '👁' : '🙈'}</button>` +
+        `<button class="gjIconBtn rmBtn" title="削除">✕</button>`;
+      li.querySelector('.visBtn').addEventListener('click', () => {
+        g.visible = !g.visible;
+        if (g.visible) map.addLayer(g.layer); else map.removeLayer(g.layer);
+        renderGjLayerList();
+      });
+      li.querySelector('.rmBtn').addEventListener('click', () => {
+        map.removeLayer(g.layer);
+        delete geoLayers[key];
+        renderGjLayerList();
+      });
+      ul.appendChild(li);
+    });
+  }
+
+  el('clearGjLayersBtn').addEventListener('click', () => {
+    const keys = Object.keys(geoLayers);
+    if (keys.length === 0) return;
+    if (!confirm('GeoJSONレイヤーをすべて削除しますか？')) return;
+    keys.forEach(key => map.removeLayer(geoLayers[key].layer));
+    Object.keys(geoLayers).forEach(key => delete geoLayers[key]);
+    renderGjLayerList();
+  });
+
+})();
+</script>
+</body>
+</html>
