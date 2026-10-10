@@ -1429,7 +1429,7 @@
           <div class="fsp-chart-wrap">
             <canvas id="fsp-chart" height="250"></canvas>
           </div>
-          <div class="fsp-section-title" style="margin-top:14px;">RVI(光)時系列グラフ（中央値）</div>
+          <div id="fsp-rvi-chart-title" class="fsp-section-title" style="margin-top:14px;">RVI(光)時系列グラフ（中央値）</div>
           <div class="fsp-chart-wrap">
             <canvas id="fsp-func-x2-chart" height="250"></canvas>
           </div>
@@ -1479,7 +1479,7 @@
     const FOLDER_LIST = [
       { label: '波長', path: 'Bands' },   
       // B02/B03/B04/B08/B11（B11は暫定）
-      { label: '指数', path: 'Indices' },
+      { label: '偏波 [Polarization]', path: 'VV_VH', showPathInLabel: false },
       // B11移動後: { label: 'SWIR', path: 'フォルダ名' } を追記
     ];
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
@@ -1865,17 +1865,25 @@ async function getAllFilesFromDB() {
           return;
         }
 
+        const newTifEntries = tifEntries.filter(e => !Object.prototype.hasOwnProperty.call(S.files, e.name));
+        if (newTifEntries.length === 0) {
+          document.getElementById('folder-label').textContent =
+            `📂 ${owner}/${repo}  ${tifEntries.length}件は読み込み済み`;
+          setStatus('ℹ️ このフォルダのTIFはすでに読み込み済みです', 'ok');
+          return;
+        }
+
         document.getElementById('folder-label').textContent =
-          `📂 ${owner}/${repo}  ${tifEntries.length}件のTIF検出`;
+          `📂 ${owner}/${repo}  ${newTifEntries.length}件の未読込TIF検出`;
 
         // ── ② 各TIFをフェッチ ──
         const fileObjects = [];
         const errors = [];
 
-        for (let i = 0; i < tifEntries.length; i++) {
+        for (let i = 0; i < newTifEntries.length; i++) {
           if (S.loadAborted) break;
-          const entry = tifEntries[i];
-          setStatus(`⏳ フェッチ中... (${i+1}/${tifEntries.length}) ${entry.name}`, 'loading');
+          const entry = newTifEntries[i];
+          setStatus(`⏳ 追加フェッチ中... (${i+1}/${newTifEntries.length}) ${entry.name}`, 'loading');
           try {
             // download_url = raw.githubusercontent.com の直リンク
             const r = await fetch(entry.download_url, { signal });
@@ -1899,7 +1907,7 @@ async function getAllFilesFromDB() {
 
         if (fileObjects.length > 0) {
           document.getElementById('folder-label').textContent =
-            `✅ ${owner}/${repo}  ${fileObjects.length}件読み込み済み` +
+            `✅ ${owner}/${repo}  ${fileObjects.length}件追加読み込み済み` +
             (errors.length ? `（${errors.length}件失敗）` : '');
           loadFiles(fileObjects);
         } else {
@@ -1959,16 +1967,11 @@ async function getAllFilesFromDB() {
       FOLDER_LIST.forEach((f, i) => {
         const opt = document.createElement('option');
         opt.value = i;
-        opt.textContent = f.label + '  [' + f.path + ']';
+        opt.textContent = f.showPathInLabel === false ? f.label : f.label + '  [' + f.path + ']';
         sel.appendChild(opt);
       });
       sel.addEventListener('change', () => {
-        // ファイルリストをリセットしてから再フェッチ
-        Object.keys(S.files).forEach(k => delete S.files[k]);
-        S.uncheckedFiles.clear();
-        document.getElementById('fileList').innerHTML = '';
-        document.getElementById('sec-band').style.display = 'none';
-        document.getElementById('sec-stats').style.display = 'none';
+        // 既存ファイルを保持したまま、選択フォルダの未読込TIFFを追加
         loadTiffFiles();
       });
     }
@@ -5522,6 +5525,12 @@ function computePolygonMedian(fileKey, ring) {
         return;
       }
 
+      const useS1Rvi = rows.some(row => row && Number.isFinite(row.RVI_S1));
+      const indexKey = useS1Rvi ? 'RVI_S1' : 'RVI';
+      const graphLabel = useS1Rvi ? 'RVI (S1)' : 'RVI (光)';
+      const titleEl = document.getElementById('fsp-rvi-chart-title');
+      if (titleEl) titleEl.textContent = `${graphLabel} 時系列グラフ（中央値）`;
+
       // 日数ベースの x 値（最初の日を基準）
       const firstDate = new Date(dates[0]);
       const dateNumericValues = dates.map(d => {
@@ -5529,9 +5538,8 @@ function computePolygonMedian(fileKey, ring) {
         return Math.floor((date - firstDate) / (1000 * 60 * 60 * 24));
       });
 
-      // RVI（光学）を抽出（キーは 'RVI'）
       const dataPoints = rows.map((r, i) => {
-        const v = (r && (r.RVI !== undefined)) ? r.RVI : null;
+        const v = r && Number.isFinite(r[indexKey]) ? r[indexKey] : null;
         return { x: dateNumericValues[i], y: (v === null ? null : v) };
       });
 
@@ -5546,12 +5554,14 @@ function computePolygonMedian(fileKey, ring) {
         yMax = yMax + pad;
       }
 
-      const pal = { border: '#be185d', bg: 'rgba(190,24,93,0.12)' };
+      const pal = useS1Rvi
+        ? { border: '#0891b2', bg: 'rgba(8,145,178,0.12)' }
+        : { border: '#be185d', bg: 'rgba(190,24,93,0.12)' };
 
       _fspFuncX2Chart = new Chart(ctx, {
         type: 'line',
         data: { datasets: [{
-          label: 'RVI (光) — 中央値',
+          label: `${graphLabel} — 中央値`,
           data: dataPoints,
           borderColor: pal.border,
           backgroundColor: pal.bg,
